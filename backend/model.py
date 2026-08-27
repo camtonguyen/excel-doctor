@@ -68,6 +68,13 @@ class CellEdit(BaseModel):
     formula: str | None = None
     num_fmt_code: str | None = None
 
+class SheetEdit(BaseModel):
+    op: Literal["RenameSheet"]
+    sheet: str
+    new_name: str
+
+Edit = CellEdit | SheetEdit
+
 class DiffEntry(BaseModel):
     sheet: str
     ref: str
