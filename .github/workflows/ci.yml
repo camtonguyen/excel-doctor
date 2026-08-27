@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-calc
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff mypy
+
+      - name: Install git hooks
+        run: bash scripts/install-hooks.sh
+
+      - name: Lint
+        run: |
+          ruff check backend/
+          mypy backend/ --ignore-missing-imports
+
+      - name: Test
+        run: pytest -q backend/tests/
+
+      - name: Check prompt-file rule
+        run: |
+          # Every commit on this branch should trace to a prompt file
+          # and no commit message should carry a banned trailer
+          git log main..HEAD --format='%B' | grep -iE '(co-authored-by|generated with|noreply@anthropic)' && {
+            echo "FAIL: banned trailer found in commit history"; exit 1; } || true
