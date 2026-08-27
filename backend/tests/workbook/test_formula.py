@@ -78,6 +78,11 @@ def test_rename_sheet_in_formula_needs_quotes_new():
     f = "=Sheet1!A1"
     assert rename_sheet_in_formula(f, "Sheet1", "My Sheet") == "='My Sheet'!A1"
 
+def test_rename_sheet_in_formula_quotes_numeric_new_name():
+    # A purely numeric sheet name must be quoted, or Excel can't parse the reference.
+    f = "=Sheet1!A1"
+    assert rename_sheet_in_formula(f, "Sheet1", "123") == "='123'!A1"
+
 def test_rename_sheet_in_formula_with_apostrophe():
     f = "='A''B'!A1"
     assert rename_sheet_in_formula(f, "A'B", "AB") == "=AB!A1"

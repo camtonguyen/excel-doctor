@@ -47,7 +47,7 @@ def rename_sheet_in_formula(formula: str, old_name: str, new_name: str) -> str:
     escaped_old = old_name.replace("'", "''")
     quoted_old = f"'{escaped_old}'"
     
-    needs_quote = not new_name.replace("_", "").isalnum()
+    needs_quote = not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new_name)
     if needs_quote:
         escaped_new = new_name.replace("'", "''")
         new_str = f"'{escaped_new}'!"

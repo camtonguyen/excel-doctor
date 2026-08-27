@@ -92,6 +92,9 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: list[Edi
         sheet_targets = get_sheet_targets(zin)
         calc_chain_dropped = _any_formula_changed(zin, sheet_targets, cell_edits_by_sheet, rename_map)
 
+        # ponytail: zip format doesn't record deflate level as metadata, so only
+        # compress_type (STORED/DEFLATED) is recoverable per entry; level itself
+        # can't be "preserved" from the source, only chosen consistently here.
         with zipfile.ZipFile(output_path, "w") as zout:
             for item in zin.infolist():
                 if item.is_dir():
