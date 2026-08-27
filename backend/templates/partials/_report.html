@@ -1,4 +1,44 @@
-<div>
+<div class="report-header">
     <h2>Báo cáo kiểm tra</h2>
-    <p>Tìm thấy {{ findings | length }} lỗi.</p>
+    <p>Tìm thấy <strong>{{ findings|length }}</strong> lỗi.</p>
+    <a href="/report/{{ job }}.csv" class="btn primary" download>Tải file báo cáo (CSV)</a>
 </div>
+
+<form hx-post="/fix/{{ job }}" hx-target="#app">
+    <div class="findings-list">
+        {% set rules_seen = [] %}
+        {% for f in findings %}
+            {% if f.rule_id not in rules_seen %}
+                {% set _ = rules_seen.append(f.rule_id) %}
+                <details hx-get="/findings/{{ job }}?rule={{ f.rule_id }}"
+                         hx-trigger="toggle once" 
+                         hx-target="find tbody">
+                    <summary>
+                        <input type="checkbox" name="fix" value="{{ f.rule_id }}" {% if f.risk != 'value' %}checked{% endif %}>
+                        <strong>{{ f.rule_id }}</strong>: Lỗi phát hiện
+                        <span style="color: var(--text-muted); font-size: 0.9em;">(Bấm để xem chi tiết)</span>
+                    </summary>
+                    <div class="hits">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Sheet</th>
+                                    <th>Ô</th>
+                                    <th>Mô Tả</th>
+                                    <th>Rủi Ro</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- HTMX will swap findings here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            {% endif %}
+        {% endfor %}
+    </div>
+    
+    <div class="actions" style="margin-top: 2rem;">
+        <button type="submit" class="btn primary">Xem trước thay đổi</button>
+    </div>
+</form>
