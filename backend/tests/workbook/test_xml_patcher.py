@@ -214,10 +214,59 @@ def test_apply_clear_cell_plain_value_keeps_calc_chain(tmp_path: Path):
             assert c.find(f"{ns}v") is None
 
 
-def test_apply_clear_cell_with_formula_drops_calc_chain(tmp_path: Path):
+
+def test_apply_set_num_fmt_preserves_sibling_styles(tmp_path: Path):
     input_path = tmp_path / "in.xlsx"
     output_path = tmp_path / "out.xlsx"
+    
+    with zipfile.ZipFile(input_path, "w") as z:
+        z.writestr("xl/_rels/workbook.xml.rels", b'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
+        z.writestr("xl/workbook.xml", b'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/styles.xml", b'<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="1" formatCode="General"/></numFmts><cellXfs count="2"><xf numFmtId="0" fontId="0"/><xf numFmtId="1" fontId="1" applyNumberFormat="1"/></cellXfs></styleSheet>')
+        # Two cells share style s="1"
+        z.writestr("xl/worksheets/sheet1.xml", b'<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" s="1"><v>40000</v></c><c r="B1" s="1"><v>40000</v></c></row></sheetData></worksheet>')
 
+    # Change only A1
+    edits = [
+        CellEdit(op="SetNumFmt", sheet="Sheet1", ref="A1", num_fmt_code="dd/mm/yyyy")
+    ]
+    
+    apply_edits(input_path, output_path, edits)
+    
+    with zipfile.ZipFile(output_path, "r") as z:
+        with z.open("xl/styles.xml") as f:
+            tree = etree.parse(f)
+            root = tree.getroot()
+            nsmap = root.nsmap
+            ns = f"{{{nsmap.get(None)}}}"
+            
+            xfs = root.findall(f".//{ns}xf")
+            # Expected: 2 original xfs + 1 new cloned xf
+            assert len(xfs) == 3
+            assert xfs[2].get("numFmtId") == "164"
+            assert xfs[2].get("fontId") == "1" # fontId cloned
+            
+            num_fmts = root.find(f"{ns}numFmts")
+            assert num_fmts is not None
+            assert len(num_fmts.findall(f"{ns}numFmt")) == 2
+            
+        with z.open("xl/worksheets/sheet1.xml") as f:
+            tree = etree.parse(f)
+            root = tree.getroot()
+            nsmap = root.nsmap
+            ns = f"{{{nsmap.get(None)}}}"
+            
+            # A1 should have the new style index (2)
+            c_a1 = root.find(f".//{ns}c[@r='A1']")
+            assert c_a1.get("s") == "2"
+            
+            # B1 should keep the old style index (1)
+            c_b1 = root.find(f".//{ns}c[@r='B1']")
+            assert c_b1.get("s") == "1"
+
+def test_apply_clear_cell_with_formula_drops_calc_chain(tmp_path: Path):
+    input_path = tmp_path / "in2.xlsx"
+    output_path = tmp_path / "out2.xlsx"
     with zipfile.ZipFile(input_path, "w") as z:
         z.writestr("xl/_rels/workbook.xml.rels", b'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/></Relationships>')
         z.writestr("xl/workbook.xml", b'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>')
