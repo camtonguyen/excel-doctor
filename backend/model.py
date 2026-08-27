@@ -8,6 +8,7 @@ class CellModel(BaseModel):
     t: str | None = None  # cell type, e.g., "s" for string, "e" for error
     v: str | None = None  # value
     f: str | None = None  # formula
+    num_fmt: str | None = None  # resolved number format string
 
 class SheetModel(BaseModel):
     name: str
