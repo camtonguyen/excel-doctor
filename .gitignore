@@ -22,6 +22,7 @@ Thumbs.db
 # Project
 uploads/
 tmp/
+plans/
 
 # Agent adapters — local per-machine, not tracked
 .agents/
