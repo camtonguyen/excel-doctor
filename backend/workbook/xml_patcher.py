@@ -95,8 +95,8 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
         calc_chain_dropped = _any_formula_changed(zin, sheet_targets, cell_edits_by_sheet, rename_map)
 
         has_numfmt_edits = any(isinstance(e, CellEdit) and e.op == "SetNumFmt" for e in edits)
-        original_s = {}
-        new_s_map = {}
+        original_s: dict[tuple[str, str], int] = {}
+        new_s_map: dict[tuple[str, str], int] = {}
         
         if has_numfmt_edits:
             for sheet_name, sheet_edits in cell_edits_by_sheet.items():
@@ -127,23 +127,24 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
                     continue
 
                 # If this item is a sheet XML, we must check if we need to apply CellEdits OR RenameMap (update references)
-                sheet_name = next((name for name, target in sheet_targets.items() if target == item.filename), None)
-                if sheet_name is not None:
-                    has_cell_edits = sheet_name in cell_edits_by_sheet
+                target_sheet_name = next((name for name, target in sheet_targets.items() if target == item.filename), None)
+                if target_sheet_name is not None:
+                    sheet_name_str: str = target_sheet_name
+                    has_cell_edits = sheet_name_str in cell_edits_by_sheet
                     has_renames = len(rename_map) > 0
                     
                     if has_cell_edits or has_renames:
-                        sheet_edits = cell_edits_by_sheet.get(sheet_name, [])
+                        sheet_edits = cell_edits_by_sheet.get(sheet_name_str, [])
                         
-                        def mutate_sheet(root, ns, sheet_edits=sheet_edits, rename_map=rename_map, has_renames=has_renames, sheet_name=sheet_name, new_s_map=new_s_map):
+                        def mutate_sheet(root, ns, sheet_edits=sheet_edits, rename_map=rename_map, has_renames=has_renames, sheet_name=sheet_name_str, new_s_map=new_s_map):
                             for c_node in root.iter(f"{ns}c"):
                                 ref = c_node.get("r")
                                 
                                 # First, apply formula updates due to renames
                                 if has_renames:
                                     f_node = c_node.find(f"{ns}f")
-                                    if f_node is not None and f_node.text:
-                                        new_f = f_node.text
+                                    if f_node is not None and f_node.text is not None:
+                                        new_f: str = f_node.text
                                         for old_name, new_name in rename_map.items():
                                             new_f = rename_sheet_in_formula(new_f, old_name, new_name)
                                         f_node.text = new_f
