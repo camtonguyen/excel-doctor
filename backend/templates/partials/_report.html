@@ -12,7 +12,7 @@
                 {% set _ = rules_seen.append(f.rule_id) %}
                 <details hx-get="/findings/{{ job }}?rule={{ f.rule_id }}"
                          hx-trigger="toggle once" 
-                         hx-target="find .hits">
+                         hx-target="find tbody">
                     <summary>
                         <input type="checkbox" name="fix" value="{{ f.rule_id }}" {% if f.risk != 'value' %}checked{% endif %}>
                         <strong>{{ f.rule_id }}</strong>: Lỗi phát hiện
