@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Doctor</title>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>Excel Doctor</h1>
+        <p>Phát hiện và tự động sửa lỗi công thức, định dạng trong file Excel.</p>
+    </header>
+
+    <main class="app-main">
+        <div id="app" class="card">
+            <h2>Tải lên file Excel</h2>
+            <form hx-post="/scan" 
+                  hx-encoding="multipart/form-data"
+                  hx-target="#app" 
+                  hx-swap="innerHTML"
+                  hx-indicator="#spinner"
+                  class="upload-form">
+                
+                <div class="drop-zone" id="drop-zone">
+                    <p>Kéo thả file .xlsx / .xlsm vào đây, hoặc click để chọn file</p>
+                    <input type="file" name="file" id="file-input" accept=".xlsx,.xlsm" required>
+                    <div id="selected-file" class="selected-file"></div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn primary">Kiểm tra file</button>
+                    <div id="spinner" class="htmx-indicator spinner"></div>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        // JS allowed per §6b: drag and drop + showing filename
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const selectedFile = document.getElementById('selected-file');
+        const form = document.querySelector('form.upload-form');
+
+        fileInput.addEventListener('change', (e) => {
+            if (fileInput.files.length > 0) {
+                selectedFile.textContent = `Đã chọn: ${fileInput.files[0].name}`;
+            } else {
+                selectedFile.textContent = '';
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileInput.dispatchEvent(new Event('change'));
+                // auto-submit on drop? The spec says:
+                // "assign dataTransfer.files[0] to the input and call form.requestSubmit()"
+                form.requestSubmit();
+            }
+        });
+    </script>
+</body>
+</html>

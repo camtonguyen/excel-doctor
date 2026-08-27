@@ -1,0 +1,26 @@
+{% for f in findings %}
+<tr>
+    <td>{{ f.sheet }}</td>
+    <td>{{ f.ref }}</td>
+    <td>{{ f.description }}</td>
+    <td>
+        {% if f.risk == 'value' %}
+            <span style="color: var(--error);">Ảnh hưởng số liệu</span>
+        {% elif f.risk == 'display' %}
+            <span style="color: var(--warning);">Hiển thị sai</span>
+        {% else %}
+            <span style="color: var(--success);">An toàn</span>
+        {% endif %}
+    </td>
+</tr>
+{% if loop.last and has_next %}
+<tr hx-get="/findings/{{ job }}?rule={{ rule }}&page={{ page + 1 }}"
+    hx-trigger="revealed" hx-swap="afterend" hx-target="this">
+    <td colspan="4" style="text-align: center; color: var(--text-muted);">Đang tải thêm…</td>
+</tr>
+{% endif %}
+{% else %}
+<tr>
+    <td colspan="4">Không tìm thấy lỗi nào.</td>
+</tr>
+{% endfor %}
