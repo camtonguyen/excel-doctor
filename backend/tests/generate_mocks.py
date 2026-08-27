@@ -1,6 +1,6 @@
 import zipfile
-import os
 from pathlib import Path
+
 
 def create_mock_xlsx(filename: str, contents: list[str]):
     """Creates a zip file (mock xlsx) containing empty files at the specified paths."""

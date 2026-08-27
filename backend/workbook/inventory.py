@@ -1,6 +1,8 @@
 import zipfile
 from pathlib import Path
+
 from backend.model import WorkbookInventory
+
 
 def get_inventory(file_path: str | Path) -> WorkbookInventory:
     """

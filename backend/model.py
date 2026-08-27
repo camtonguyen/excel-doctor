@@ -1,5 +1,7 @@
+from typing import Any, Literal
+
 from pydantic import BaseModel
-from typing import Literal, Any
+
 
 class WorkbookInventory(BaseModel):
     """Tracks features found in the workbook that dictate whether tier A patching is required."""

@@ -1,6 +1,8 @@
 from pathlib import Path
-from backend.workbook.inventory import get_inventory
+
 from backend.model import WorkbookInventory
+from backend.workbook.inventory import get_inventory
+
 
 class WorkbookModel:
     """In-memory representation of the parsed Excel file."""

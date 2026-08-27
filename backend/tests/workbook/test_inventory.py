@@ -1,5 +1,7 @@
-import yaml
 from pathlib import Path
+
+import yaml
+
 from backend.workbook.inventory import get_inventory
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent.parent / "fixtures"
