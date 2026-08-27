@@ -67,7 +67,38 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                     if name and target:
                         wb.sheets[name] = SheetModel(name=name, target=target)
                         
-        # 3. Parse cells from each worksheet
+        # 3. Parse styles to map cell format index to actual number format string
+        cell_xfs_num_fmt_ids = []
+        custom_num_fmts = {}
+        if "xl/styles.xml" in z.namelist():
+            with z.open("xl/styles.xml") as f:
+                tree = etree.parse(f)
+                root = tree.getroot()
+                
+                # Extract custom numFmts
+                numFmts_node = root.find("{*}numFmts")
+                if numFmts_node is not None:
+                    for numFmt in numFmts_node.iter("{*}numFmt"):
+                        fmt_id = int(numFmt.get("numFmtId", "0"))
+                        code = numFmt.get("formatCode", "")
+                        custom_num_fmts[fmt_id] = code
+                        
+                # Extract cellXfs
+                cellXfs_node = root.find("{*}cellXfs")
+                if cellXfs_node is not None:
+                    for xf in cellXfs_node.iter("{*}xf"):
+                        cell_xfs_num_fmt_ids.append(int(xf.get("numFmtId", "0")))
+
+        # Define basic built-in date formats (to cover common R17 ambiguous dates)
+        BUILTIN_FMTS = {
+            14: "m/d/yyyy",
+            15: "d-mmm-yy",
+            16: "d-mmm",
+            17: "mmm-yy",
+            22: "m/d/yyyy h:mm",
+        }
+
+        # 4. Parse cells from each worksheet
         for sheet_model in wb.sheets.values():
             if sheet_model.target in z.namelist():
                 with z.open(sheet_model.target) as f:
@@ -75,12 +106,19 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                     for c_node in tree.getroot().iter("{*}c"):
                         ref = c_node.get("r")
                         t = c_node.get("t")
+                        s_idx = int(c_node.get("s", "0"))
+                        
                         v_node = c_node.find("{*}v")
                         f_node = c_node.find("{*}f")
                         
                         v = (v_node.text or "") if v_node is not None else None
                         formula = f_node.text if f_node is not None else None
                         
-                        sheet_model.cells[ref] = CellModel(ref=ref, t=t, v=v, f=formula)
+                        num_fmt = None
+                        if s_idx < len(cell_xfs_num_fmt_ids):
+                            fmt_id = cell_xfs_num_fmt_ids[s_idx]
+                            num_fmt = custom_num_fmts.get(fmt_id) or BUILTIN_FMTS.get(fmt_id)
+                        
+                        sheet_model.cells[ref] = CellModel(ref=ref, t=t, v=v, f=formula, num_fmt=num_fmt)
                         
     return wb
