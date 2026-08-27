@@ -25,10 +25,10 @@ once in `backend/audit/__init__.py`, which every rule module already transits
 through on import.
 
 ## In scope / out of scope
-- **In scope**: `backend/audit/__init__.py` importing every rule module so
-  registration always runs; `RuleR14` (detect + fix) in a new
-  `backend/audit/rules_datatype.py`; a new mock fixture with whitespace
-  defects.
+- **In scope**: `backend/audit/__init__.py` auto-discovering every
+  `rules_*.py` module so registration always runs; `RuleR14` (detect + fix) in
+  a new `backend/audit/rules_datatype.py`; a new mock fixture with whitespace
+  defects; a `WorkbookModel.resolve_shared_string` seam shared by R03 and R14.
 - **Out of scope**: `xml_patcher.py` itself (next slice — R14's `fix()` only
   needs to produce a `CellEdit`, not apply one), R15 (separate slice, rename
   is a much bigger operation per §5.3).
@@ -44,18 +44,22 @@ through on import.
   stray whitespace."
 
 ## Plan
-1. Fix `backend/audit/__init__.py` to import `rules_formula` (and
-   `rules_datatype` once it exists) so `registry` is populated on package
-   import, not by import-order luck.
+1. Fix `backend/audit/__init__.py` to auto-import every `rules_*.py` module
+   in the package (`pkgutil.iter_modules` + `importlib.import_module`) so
+   `registry` is populated on package import, not by import-order luck or a
+   hand-maintained list that the next rule file can forget to join.
 2. Add a `whitespace.xlsx` mock fixture (leading/trailing spaces, doubled
    space, NBSP, zero-width space, and one clean control string) via
    `backend/tests/generate_mocks.py`.
-3. Add `backend/audit/rules_datatype.py` with `RuleR14`: `detect()` flags any
+3. Add `WorkbookModel.resolve_shared_string(cell)` in `reader.py` — the
+   `t == "s"` → `int(cell.v)` → `shared_strings[idx]` lookup was duplicated in
+   R03; give it one home and use it from both R03 and R14.
+4. Add `backend/audit/rules_datatype.py` with `RuleR14`: `detect()` flags any
    shared-string cell where `_clean(text) != text`; `fix()` returns a
    `SetValue` `CellEdit` with the cleaned text.
-4. Add `backend/tests/rules/test_rules_datatype.py` covering all four defect
+5. Add `backend/tests/rules/test_rules_datatype.py` covering all four defect
    shapes and the clean-string negative case.
-5. Add a regression test proving `import backend.app` alone populates the
+6. Add a regression test proving `import backend.app` alone populates the
    registry (guards the root-cause fix).
 
 ## Acceptance

@@ -21,6 +21,16 @@ class WorkbookModel:
             for ref, cell in sheet.cells.items():
                 yield sheet_name, ref, cell
 
+    def resolve_shared_string(self, cell: CellModel) -> str | None:
+        """Returns a t="s" cell's text, or None if the cell isn't a shared string
+        or its index doesn't resolve."""
+        if cell.t != "s" or cell.v is None:
+            return None
+        try:
+            return self.shared_strings[int(cell.v)]
+        except (ValueError, IndexError):
+            return None
+
 def _strip_ns(tag: str) -> str:
     return tag.split("}")[1] if "}" in tag else tag
 
