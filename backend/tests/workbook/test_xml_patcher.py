@@ -1,10 +1,11 @@
 import zipfile
 from pathlib import Path
+
 from lxml import etree
-import pytest
 
 from backend.model import CellEdit
 from backend.workbook.xml_patcher import apply_edits
+
 
 def test_apply_set_value_inline(tmp_path: Path):
     input_path = tmp_path / "in.xlsx"
@@ -108,20 +109,19 @@ def test_apply_set_value_normal(tmp_path: Path):
     
     apply_edits(input_path, output_path, edits)
     
-    with zipfile.ZipFile(output_path, "r") as z:
-        with z.open("xl/worksheets/sheet1.xml") as f:
-            tree = etree.parse(f)
-            root = tree.getroot()
-            nsmap = root.nsmap
-            ns = f"{{{nsmap.get(None)}}}"
-            
-            c = root.find(f".//{ns}c[@r='C3']")
-            assert c is not None
-            assert "t" not in c.attrib  # t is removed because no cell_type is provided
-            
-            v = c.find(f"{ns}v")
-            assert v is not None
-            assert v.text == "123.45"
+    with zipfile.ZipFile(output_path, "r") as z, z.open("xl/worksheets/sheet1.xml") as f:
+        tree = etree.parse(f)
+        root = tree.getroot()
+        nsmap = root.nsmap
+        ns = f"{{{nsmap.get(None)}}}"
+
+        c = root.find(f".//{ns}c[@r='C3']")
+        assert c is not None
+        assert "t" not in c.attrib  # t is removed because no cell_type is provided
+
+        v = c.find(f"{ns}v")
+        assert v is not None
+        assert v.text == "123.45"
 
 
 def test_apply_clear_cell_plain_value_keeps_calc_chain(tmp_path: Path):
