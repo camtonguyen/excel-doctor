@@ -1,4 +1,5 @@
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 from lxml import etree
@@ -13,6 +14,12 @@ class WorkbookModel:
         self.inventory = inventory
         self.sheets: dict[str, SheetModel] = {}
         self.shared_strings: list[str] = []
+
+    def iter_cells(self) -> Iterator[tuple[str, str, CellModel]]:
+        """Yields (sheet_name, ref, cell) for every cell in every sheet."""
+        for sheet_name, sheet in self.sheets.items():
+            for ref, cell in sheet.cells.items():
+                yield sheet_name, ref, cell
 
 def _strip_ns(tag: str) -> str:
     return tag.split("}")[1] if "}" in tag else tag

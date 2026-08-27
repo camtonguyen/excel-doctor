@@ -14,17 +14,16 @@ class RuleR01(Rule):
     
     def detect(self, wb: WorkbookModel) -> list[Finding]:
         findings = []
-        for sheet_name, sheet in wb.sheets.items():
-            for ref, cell in sheet.cells.items():
-                if cell.f and "#REF!" in cell.f:
-                    findings.append(Finding(
-                        rule_id=self.id,
-                        sheet=sheet_name,
-                        ref=ref,
-                        description="Formula contains #REF!",
-                        severity=self.severity,
-                        risk=self.risk
-                    ))
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.f and "#REF!" in cell.f:
+                findings.append(Finding(
+                    rule_id=self.id,
+                    sheet=sheet_name,
+                    ref=ref,
+                    description="Formula contains #REF!",
+                    severity=self.severity,
+                    risk=self.risk
+                ))
         return findings
 
 class RuleR02(Rule):
@@ -37,17 +36,16 @@ class RuleR02(Rule):
     
     def detect(self, wb: WorkbookModel) -> list[Finding]:
         findings = []
-        for sheet_name, sheet in wb.sheets.items():
-            for ref, cell in sheet.cells.items():
-                if cell.t == "e" or (cell.v and str(cell.v).startswith("#") and str(cell.v).endswith("!")):
-                    findings.append(Finding(
-                        rule_id=self.id,
-                        sheet=sheet_name,
-                        ref=ref,
-                        description=f"Cell evaluates to error: {cell.v}",
-                        severity=self.severity,
-                        risk=self.risk
-                    ))
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.t == "e" or (cell.v and str(cell.v).startswith("#") and str(cell.v).endswith("!")):
+                findings.append(Finding(
+                    rule_id=self.id,
+                    sheet=sheet_name,
+                    ref=ref,
+                    description=f"Cell evaluates to error: {cell.v}",
+                    severity=self.severity,
+                    risk=self.risk
+                ))
         return findings
 
 class RuleR03(Rule):
@@ -61,24 +59,23 @@ class RuleR03(Rule):
     def detect(self, wb: WorkbookModel) -> list[Finding]:
         findings = []
         error_strings = {"#REF!", "#VALUE!", "#N/A", "#NAME?", "#DIV/0!", "#NUM!", "#NULL!", "#ERROR!"}
-        for sheet_name, sheet in wb.sheets.items():
-            for ref, cell in sheet.cells.items():
-                if not cell.f and cell.t == "s" and cell.v is not None:
-                    # Resolve shared string
-                    try:
-                        idx = int(cell.v)
-                        text = wb.shared_strings[idx]
-                        if text in error_strings:
-                            findings.append(Finding(
-                                rule_id=self.id,
-                                sheet=sheet_name,
-                                ref=ref,
-                                description="Error code pasted as literal text",
-                                severity=self.severity,
-                                risk=self.risk
-                            ))
-                    except (ValueError, IndexError):
-                        pass
+        for sheet_name, ref, cell in wb.iter_cells():
+            if not cell.f and cell.t == "s" and cell.v is not None:
+                # Resolve shared string
+                try:
+                    idx = int(cell.v)
+                    text = wb.shared_strings[idx]
+                    if text in error_strings:
+                        findings.append(Finding(
+                            rule_id=self.id,
+                            sheet=sheet_name,
+                            ref=ref,
+                            description="Error code pasted as literal text",
+                            severity=self.severity,
+                            risk=self.risk
+                        ))
+                except (ValueError, IndexError):
+                    pass
         return findings
 
 class RuleR04(Rule):
@@ -93,32 +90,29 @@ class RuleR04(Rule):
         findings = []
         # Pre-compute cells that return ""
         empty_cells: dict[str, set[str]] = {}
-        for sheet_name, sheet in wb.sheets.items():
-            empty_cells[sheet_name] = set()
-            for ref, cell in sheet.cells.items():
-                # A cell that is type "str" and value "" 
-                if cell.t == "str" and cell.v == "":
-                    empty_cells[sheet_name].add(ref)
-                
+        for sheet_name, ref, cell in wb.iter_cells():
+            # A cell that is type "str" and value ""
+            if cell.t == "str" and cell.v == "":
+                empty_cells.setdefault(sheet_name, set()).add(ref)
+
         # Now detect arithmetic on those cells
-        for sheet_name, sheet in wb.sheets.items():
-            for ref, cell in sheet.cells.items():
-                if cell.f:
-                    tokens = tokenize(cell.f)
-                    ops = [t.value for t in tokens if t.type == TokenType.OPERATOR and t.value in "+-*/"]
-                    if ops:
-                        # Check operands
-                        for t in tokens:
-                            if t.type == TokenType.OPERAND and t.value in empty_cells[sheet_name]:
-                                findings.append(Finding(
-                                    rule_id=self.id,
-                                    sheet=sheet_name,
-                                    ref=ref,
-                                    description=f"Arithmetic operation on cell {t.value} which evaluates to empty string",
-                                    severity=self.severity,
-                                    risk=self.risk
-                                ))
-                                break
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.f:
+                tokens = tokenize(cell.f)
+                ops = [t.value for t in tokens if t.type == TokenType.OPERATOR and t.value in "+-*/"]
+                if ops:
+                    # Check operands
+                    for t in tokens:
+                        if t.type == TokenType.OPERAND and t.value in empty_cells.get(sheet_name, set()):
+                            findings.append(Finding(
+                                rule_id=self.id,
+                                sheet=sheet_name,
+                                ref=ref,
+                                description=f"Arithmetic operation on cell {t.value} which evaluates to empty string",
+                                severity=self.severity,
+                                risk=self.risk
+                            ))
+                            break
         return findings
 
 class RuleR05(Rule):
@@ -132,22 +126,21 @@ class RuleR05(Rule):
     def detect(self, wb: WorkbookModel) -> list[Finding]:
         findings = []
         sheet_names = set(wb.sheets.keys())
-        for sheet_name, sheet in wb.sheets.items():
-            for ref, cell in sheet.cells.items():
-                if cell.f:
-                    tokens = tokenize(cell.f)
-                    for t in tokens:
-                        if t.type == TokenType.OPERAND and "!" in t.value:
-                            target_sheet = t.value.split("!")[0].strip("'")
-                            if target_sheet not in sheet_names and not target_sheet.startswith("#"):
-                                findings.append(Finding(
-                                    rule_id=self.id,
-                                    sheet=sheet_name,
-                                    ref=ref,
-                                    description=f"References missing sheet: {target_sheet}",
-                                    severity=self.severity,
-                                    risk=self.risk
-                                ))
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.f:
+                tokens = tokenize(cell.f)
+                for t in tokens:
+                    if t.type == TokenType.OPERAND and "!" in t.value:
+                        target_sheet = t.value.split("!")[0].strip("'")
+                        if target_sheet not in sheet_names and not target_sheet.startswith("#"):
+                            findings.append(Finding(
+                                rule_id=self.id,
+                                sheet=sheet_name,
+                                ref=ref,
+                                description=f"References missing sheet: {target_sheet}",
+                                severity=self.severity,
+                                risk=self.risk
+                            ))
         return findings
 
 registry.register(RuleR01())
