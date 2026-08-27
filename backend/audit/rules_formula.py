@@ -60,22 +60,18 @@ class RuleR03(Rule):
         findings = []
         error_strings = {"#REF!", "#VALUE!", "#N/A", "#NAME?", "#DIV/0!", "#NUM!", "#NULL!", "#ERROR!"}
         for sheet_name, ref, cell in wb.iter_cells():
-            if not cell.f and cell.t == "s" and cell.v is not None:
-                # Resolve shared string
-                try:
-                    idx = int(cell.v)
-                    text = wb.shared_strings[idx]
-                    if text in error_strings:
-                        findings.append(Finding(
-                            rule_id=self.id,
-                            sheet=sheet_name,
-                            ref=ref,
-                            description="Error code pasted as literal text",
-                            severity=self.severity,
-                            risk=self.risk
-                        ))
-                except (ValueError, IndexError):
-                    pass
+            if cell.f:
+                continue
+            text = wb.resolve_shared_string(cell)
+            if text in error_strings:
+                findings.append(Finding(
+                    rule_id=self.id,
+                    sheet=sheet_name,
+                    ref=ref,
+                    description="Error code pasted as literal text",
+                    severity=self.severity,
+                    risk=self.risk
+                ))
         return findings
 
 class RuleR04(Rule):
