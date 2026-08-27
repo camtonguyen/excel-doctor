@@ -1,6 +1,7 @@
+from collections.abc import Sequence
 from typing import Literal
 
-from backend.model import CellEdit, Finding
+from backend.model import Edit, Finding
 
 
 class Rule:
@@ -16,7 +17,7 @@ class Rule:
         """Scans the workbook and returns a list of Findings."""
         raise NotImplementedError
 
-    def fix(self, wb, finding: Finding) -> list[CellEdit]:
+    def fix(self, wb, finding: Finding) -> Sequence[Edit]:
         """Returns the edits required to fix the finding."""
         raise NotImplementedError
 

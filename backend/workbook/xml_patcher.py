@@ -1,5 +1,6 @@
 import zipfile
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 from lxml import etree
@@ -78,7 +79,7 @@ def _any_formula_changed(zin: zipfile.ZipFile, sheet_targets: dict[str, str], ce
 
     return False
 
-def apply_edits(input_path: str | Path, output_path: str | Path, edits: list[Edit]) -> None:
+def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence[Edit]) -> None:
     cell_edits_by_sheet = defaultdict(list)
     rename_map = {}
     
