@@ -1,4 +1,4 @@
-from backend.workbook.formula import TokenType, tokenize
+from backend.workbook.formula import TokenType, rename_sheet_in_formula, tokenize
 
 
 def test_tokenize_simple_reference():
@@ -65,3 +65,31 @@ def test_lossless_reconstruction():
     for f in formulas:
         tokens = tokenize(f)
         assert "".join(t.value for t in tokens) == f, f"Lossless check failed for: {f}"
+
+def test_rename_sheet_in_formula_unquoted():
+    f = "=Sheet1!A1 + Sheet1!B2"
+    assert rename_sheet_in_formula(f, "Sheet1", "NewSheet") == "=NewSheet!A1 + NewSheet!B2"
+
+def test_rename_sheet_in_formula_quoted_old():
+    f = "='Báo cáo tháng 10'!A1"
+    assert rename_sheet_in_formula(f, "Báo cáo tháng 10", "Report") == "=Report!A1"
+
+def test_rename_sheet_in_formula_needs_quotes_new():
+    f = "=Sheet1!A1"
+    assert rename_sheet_in_formula(f, "Sheet1", "My Sheet") == "='My Sheet'!A1"
+
+def test_rename_sheet_in_formula_with_apostrophe():
+    f = "='A''B'!A1"
+    assert rename_sheet_in_formula(f, "A'B", "AB") == "=AB!A1"
+
+def test_rename_sheet_in_formula_leaves_strings_alone():
+    f = '=SUMIF(A:A, "Sheet1!A1", Sheet1!B:B)'
+    assert rename_sheet_in_formula(f, "Sheet1", "Sheet2") == '=SUMIF(A:A, "Sheet1!A1", Sheet2!B:B)'
+
+def test_rename_sheet_in_formula_range():
+    f = "=Sheet1!A1:Sheet1!B2"
+    assert rename_sheet_in_formula(f, "Sheet1", "S2") == "=S2!A1:S2!B2"
+
+def test_rename_sheet_in_formula_ignores_other_sheets():
+    f = "=OtherSheet!A1 + Sheet1!B1"
+    assert rename_sheet_in_formula(f, "Sheet1", "S2") == "=OtherSheet!A1 + S2!B1"

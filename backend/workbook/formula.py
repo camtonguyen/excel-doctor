@@ -37,3 +37,34 @@ def tokenize(formula: str) -> list[Token]:
                 tokens.append(Token(type=TokenType[type_name], value=value))
                 break
     return tokens
+
+def rename_sheet_in_formula(formula: str, old_name: str, new_name: str) -> str:
+    """
+    Safely renames sheet references inside a formula, preserving strings and structure.
+    """
+    tokens = tokenize(formula)
+    
+    escaped_old = old_name.replace("'", "''")
+    quoted_old = f"'{escaped_old}'"
+    
+    needs_quote = not new_name.replace("_", "").isalnum()
+    if needs_quote:
+        escaped_new = new_name.replace("'", "''")
+        new_str = f"'{escaped_new}'!"
+    else:
+        new_str = f"{new_name}!"
+
+    # Match old name followed by ! at start of operand or after a colon.
+    pattern = re.compile(
+        r"(^|:)(?:" + re.escape(old_name) + r"|" + re.escape(quoted_old) + r")!"
+    )
+
+    out = []
+    for t in tokens:
+        if t.type == TokenType.OPERAND:
+            val = pattern.sub(rf"\g<1>{new_str}", t.value)
+            out.append(val)
+        else:
+            out.append(t.value)
+            
+    return "".join(out)
