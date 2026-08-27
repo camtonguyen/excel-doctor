@@ -34,7 +34,7 @@ jobs:
           mypy backend/ --ignore-missing-imports
 
       - name: Test
-        run: pytest -q backend/tests/
+        run: PYTHONPATH=. pytest -q backend/tests/
 
       - name: Check prompt-file rule
         run: |
