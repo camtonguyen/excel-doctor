@@ -1,7 +1,18 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+
+class CellModel(BaseModel):
+    ref: str  # e.g., "A1"
+    t: str | None = None  # cell type, e.g., "s" for string, "e" for error
+    v: str | None = None  # value
+    f: str | None = None  # formula
+
+class SheetModel(BaseModel):
+    name: str
+    target: str # e.g. "worksheets/sheet1.xml"
+    cells: dict[str, CellModel] = Field(default_factory=dict)
 
 class WorkbookInventory(BaseModel):
     """Tracks features found in the workbook that dictate whether tier A patching is required."""
