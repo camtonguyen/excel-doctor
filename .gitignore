@@ -23,6 +23,11 @@ Thumbs.db
 uploads/
 tmp/
 
+# Agent adapters — local per-machine, not tracked
+.agents/
+.claude/
+.codex/
+
 # Environment
 .env
 .env.local

@@ -1,7 +1,7 @@
 # Excel Doctor — Agent Foundation
 
 This file is the single source of truth for every agent working on this project.
-Claude Code reads it via `CLAUDE.md`; Codex and Antigravity read it natively.
+Claude Code reads it via `.claude/CLAUDE.md`; Codex and Antigravity read it natively.
 
 ## Spec
 

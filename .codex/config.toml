@@ -1,7 +1,0 @@
-# Codex adapter — points at the shared skills and prompts directories.
-
-[skills]
-path = "../skills"
-
-[prompts]
-path = "../prompts"
