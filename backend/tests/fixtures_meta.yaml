@@ -1,0 +1,17 @@
+fixtures:
+  chart_pivot.xlsx:
+    description: "Has charts and pivot tables, triggering tier A"
+    inventory:
+      has_charts: true
+      has_pivot_tables: true
+      has_pivot_caches: true
+      requires_tier_a: true
+  macro.xlsm:
+    description: "Has VBA macro, triggering tier A"
+    inventory:
+      has_macros: true
+      requires_tier_a: true
+  simple.xlsx:
+    description: "Simple file, safe for tier B"
+    inventory:
+      requires_tier_a: false
