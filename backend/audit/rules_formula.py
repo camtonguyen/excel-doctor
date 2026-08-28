@@ -1,7 +1,7 @@
 import re
 
 from backend.audit.base import Rule, registry
-from backend.model import CellEdit, Edit, Finding
+from backend.model import CellEdit, CellModel, Edit, Finding
 from backend.workbook.formula import TokenType, tokenize
 from backend.workbook.reader import WorkbookModel
 
@@ -242,6 +242,82 @@ class RuleR06(Rule):
         ]
 
 
+class RuleR07(Rule):
+    id = "R07"
+    title = "Empty cell breaks a formula chain"
+    why = "An empty cell surrounded by formulas in the same column usually indicates a missing row fill."
+    severity = "warning"
+    risk = "value"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            cols: dict[str, dict[int, CellModel]] = {}
+            for ref, cell in sheet.cells.items():
+                c, r = _split_ref(ref)
+                if c:
+                    cols.setdefault(c, {})[r] = cell
+
+            for col, cells in cols.items():
+                f_rows = {r for r, cell in cells.items() if cell.f}
+                for r in f_rows:
+                    if r + 2 in f_rows and r + 1 not in f_rows:
+                        gap_cell = cells.get(r + 1)
+                        if gap_cell is None or (
+                            not getattr(gap_cell, "f", None)
+                            and not getattr(gap_cell, "v", None)
+                        ):
+                            findings.append(
+                                Finding(
+                                    rule_id=self.id,
+                                    sheet=sheet_name,
+                                    ref=f"{col}{r + 1}",
+                                    description=f"Empty cell breaks formula chain between {col}{r} and {col}{r + 2}.",
+                                    severity=self.severity,
+                                    risk=self.risk,
+                                )
+                            )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        sheet = wb.sheets[finding.sheet]
+        c, r = _split_ref(finding.ref)
+
+        cell_below = sheet.cells.get(f"{c}{r + 1}")
+        if not cell_below or not cell_below.f:
+            return []
+
+        f_below = cell_below.f
+
+        tokens = tokenize(f_below)
+        out = []
+        for t in tokens:
+            if t.type == TokenType.OPERAND:
+                val = t.value
+
+                def repl(m):
+                    col_part = m.group(1)
+                    abs_row = m.group(2)
+                    row_num = int(m.group(3))
+                    if abs_row == "$":
+                        return m.group(0)
+                    new_row = max(1, row_num - 1)
+                    return f"{col_part}{abs_row}{new_row}"
+
+                val = re.sub(r"(?<![A-Za-z])([\$]?[A-Za-z]+)([\$]?)(\d+)\b", repl, val)
+                out.append(val)
+            else:
+                out.append(t.value)
+        new_f = "".join(out)
+
+        return [
+            CellEdit(
+                op="SetFormula", sheet=finding.sheet, ref=finding.ref, formula=new_f
+            )
+        ]
+
+
 class RuleR05(Rule):
     id = "R05"
     title = "Reference to a sheet that doesn't exist"
@@ -330,4 +406,5 @@ registry.register(RuleR03())
 registry.register(RuleR04())
 registry.register(RuleR05())
 registry.register(RuleR06())
+registry.register(RuleR07())
 registry.register(RuleR20())
