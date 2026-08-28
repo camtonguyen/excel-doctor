@@ -12,13 +12,16 @@ class CellModel(BaseModel):
     font_name: str | None = None
     font_size: str | None = None
 
+
 class SheetModel(BaseModel):
     name: str
-    target: str # e.g. "worksheets/sheet1.xml"
+    target: str  # e.g. "worksheets/sheet1.xml"
     cells: dict[str, CellModel] = Field(default_factory=dict)
+
 
 class WorkbookInventory(BaseModel):
     """Tracks features found in the workbook that dictate whether tier A patching is required."""
+
     has_charts: bool = False
     has_drawings: bool = False
     has_media: bool = False
@@ -37,22 +40,25 @@ class WorkbookInventory(BaseModel):
     @property
     def requires_tier_a(self) -> bool:
         """Returns True if any features are present that openpyxl would drop."""
-        return any([
-            self.has_charts,
-            self.has_drawings,
-            self.has_media,
-            self.has_pivot_tables,
-            self.has_pivot_caches,
-            self.has_macros,
-            self.has_threaded_comments,
-            self.has_persons,
-            self.has_tables,
-            self.has_external_links,
-            self.has_x14_conditional_formatting,
-            self.has_sparklines,
-            self.has_form_controls,
-            self.has_activex,
-        ])
+        return any(
+            [
+                self.has_charts,
+                self.has_drawings,
+                self.has_media,
+                self.has_pivot_tables,
+                self.has_pivot_caches,
+                self.has_macros,
+                self.has_threaded_comments,
+                self.has_persons,
+                self.has_tables,
+                self.has_external_links,
+                self.has_x14_conditional_formatting,
+                self.has_sparklines,
+                self.has_form_controls,
+                self.has_activex,
+            ]
+        )
+
 
 class Finding(BaseModel):
     rule_id: str
@@ -61,6 +67,7 @@ class Finding(BaseModel):
     description: str
     severity: Literal["error", "warning", "style"]
     risk: Literal["safe", "display", "value"]
+
 
 class CellEdit(BaseModel):
     op: Literal["SetValue", "SetFormula", "SetNumFmt", "ClearCell", "SetFont"]
@@ -73,12 +80,15 @@ class CellEdit(BaseModel):
     font_name: str | None = None
     font_size: str | None = None
 
+
 class SheetEdit(BaseModel):
     op: Literal["RenameSheet"]
     sheet: str
     new_name: str
 
+
 Edit = CellEdit | SheetEdit
+
 
 class DiffEntry(BaseModel):
     sheet: str

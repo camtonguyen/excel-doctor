@@ -20,7 +20,7 @@ class JobStore:
             "findings": [],
             "total_sheets": 0,
             "done_sheets": 0,
-            "dir": job_dir
+            "dir": job_dir,
         }
         return job_id
 
@@ -31,5 +31,6 @@ class JobStore:
         job = self.jobs.pop(job_id, None)
         if job and job["dir"].exists():
             shutil.rmtree(job["dir"])
+
 
 store = JobStore()

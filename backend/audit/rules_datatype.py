@@ -31,26 +31,31 @@ class RuleR14(Rule):
         for sheet_name, ref, cell in wb.iter_cells():
             text = wb.resolve_shared_string(cell)
             if text is not None and _clean(text) != text:
-                findings.append(Finding(
-                    rule_id=self.id,
-                    sheet=sheet_name,
-                    ref=ref,
-                    description="Stray whitespace or invisible character in cell text",
-                    severity=self.severity,
-                    risk=self.risk
-                ))
+                findings.append(
+                    Finding(
+                        rule_id=self.id,
+                        sheet=sheet_name,
+                        ref=ref,
+                        description="Stray whitespace or invisible character in cell text",
+                        severity=self.severity,
+                        risk=self.risk,
+                    )
+                )
         return findings
 
     def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
         cell = wb.sheets[finding.sheet].cells[finding.ref]
         text = wb.resolve_shared_string(cell)
         assert text is not None, "fix() requires a finding produced by detect()"
-        return [CellEdit(
-            op="SetValue",
-            sheet=finding.sheet,
-            ref=finding.ref,
-            value=_clean(text),
-            cell_type="inlineStr"
-        )]
+        return [
+            CellEdit(
+                op="SetValue",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                value=_clean(text),
+                cell_type="inlineStr",
+            )
+        ]
+
 
 registry.register(RuleR14())

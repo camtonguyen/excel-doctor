@@ -10,6 +10,7 @@ from backend.workbook.inventory import get_inventory
 
 class WorkbookModel:
     """In-memory representation of the parsed Excel file."""
+
     def __init__(self, inventory: WorkbookInventory):
         self.inventory = inventory
         self.sheets: dict[str, SheetModel] = {}
@@ -31,13 +32,15 @@ class WorkbookModel:
         except (ValueError, IndexError):
             return None
 
+
 def _strip_ns(tag: str) -> str:
     return tag.split("}")[1] if "}" in tag else tag
+
 
 def read_workbook(file_path: str | Path) -> WorkbookModel:
     inventory = get_inventory(file_path)
     wb = WorkbookModel(inventory=inventory)
-    
+
     with zipfile.ZipFile(file_path, "r") as z:
         # 1. Parse shared strings if they exist
         if "xl/sharedStrings.xml" in z.namelist():
@@ -47,7 +50,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                     t_node = si.find("{*}t")
                     text = t_node.text if t_node is not None else ""
                     wb.shared_strings.append(text or "")
-                    
+
         # 2. Parse workbook.xml to get sheet names and rel IDs
         sheet_targets = {}
         if "xl/_rels/workbook.xml.rels" in z.namelist():
@@ -56,27 +59,29 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                 for rel in tree.getroot().iter("{*}Relationship"):
                     if "worksheet" in rel.get("Type", ""):
                         sheet_targets[rel.get("Id")] = "xl/" + rel.get("Target")
-                        
+
         if "xl/workbook.xml" in z.namelist():
             with z.open("xl/workbook.xml") as f:
                 tree = etree.parse(f)
                 for sheet in tree.getroot().iter("{*}sheet"):
                     name = sheet.get("name")
-                    r_id = sheet.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+                    r_id = sheet.get(
+                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+                    )
                     target = sheet_targets.get(r_id)
                     if name and target:
                         wb.sheets[name] = SheetModel(name=name, target=target)
-                        
+
         # 3. Parse styles to map cell format index to actual number format string
         cell_xfs_num_fmt_ids = []
         cell_xfs_font_ids = []
         custom_num_fmts = {}
-        fonts = {} # id -> (name, size)
+        fonts = {}  # id -> (name, size)
         if "xl/styles.xml" in z.namelist():
             with z.open("xl/styles.xml") as f:
                 tree = etree.parse(f)
                 root = tree.getroot()
-                
+
                 # Extract custom numFmts
                 numFmts_node = root.find("{*}numFmts")
                 if numFmts_node is not None:
@@ -84,7 +89,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         fmt_id = int(numFmt.get("numFmtId", "0"))
                         code = numFmt.get("formatCode", "")
                         custom_num_fmts[fmt_id] = code
-                        
+
                 # Extract fonts
                 fonts_node = root.find("{*}fonts")
                 if fonts_node is not None:
@@ -94,7 +99,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         name = name_node.get("val") if name_node is not None else None
                         sz = sz_node.get("val") if sz_node is not None else None
                         fonts[i] = (name, sz)
-                        
+
                 # Extract cellXfs
                 cellXfs_node = root.find("{*}cellXfs")
                 if cellXfs_node is not None:
@@ -120,23 +125,33 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         ref = c_node.get("r")
                         t = c_node.get("t")
                         s_idx = int(c_node.get("s", "0"))
-                        
+
                         v_node = c_node.find("{*}v")
                         f_node = c_node.find("{*}f")
-                        
+
                         v = (v_node.text or "") if v_node is not None else None
                         formula = f_node.text if f_node is not None else None
-                        
+
                         num_fmt = None
                         font_name = None
                         font_size = None
                         if s_idx < len(cell_xfs_num_fmt_ids):
                             fmt_id = cell_xfs_num_fmt_ids[s_idx]
-                            num_fmt = custom_num_fmts.get(fmt_id) or BUILTIN_FMTS.get(fmt_id)
+                            num_fmt = custom_num_fmts.get(fmt_id) or BUILTIN_FMTS.get(
+                                fmt_id
+                            )
                         if s_idx < len(cell_xfs_font_ids):
                             f_id = cell_xfs_font_ids[s_idx]
                             font_name, font_size = fonts.get(f_id, (None, None))
-                        
-                        sheet_model.cells[ref] = CellModel(ref=ref, t=t, v=v, f=formula, num_fmt=num_fmt, font_name=font_name, font_size=font_size)
-                        
+
+                        sheet_model.cells[ref] = CellModel(
+                            ref=ref,
+                            t=t,
+                            v=v,
+                            f=formula,
+                            num_fmt=num_fmt,
+                            font_name=font_name,
+                            font_size=font_size,
+                        )
+
     return wb
