@@ -8,6 +8,7 @@ from backend.audit.rules_formula import (
     RuleR04,
     RuleR05,
     RuleR06,
+    RuleR07,
     RuleR20,
 )
 from backend.model import CellEdit, CellModel, SheetModel, WorkbookInventory
@@ -120,3 +121,38 @@ def test_r06_running_balance_chain():
     f7 = next(f for f in findings if f.ref == "A7")
     edits7 = rule.fix(wb, f7)
     assert edits7[0].formula == "A$6+10"
+
+
+def test_r07_empty_cell_breaks_chain():
+    rule = RuleR07()
+    wb = WorkbookModel(inventory=None)
+
+    cells = {
+        "A1": CellModel(ref="A1", f="B1+C1"),
+        # A2 is completely missing
+        "A3": CellModel(ref="A3", f="B3+C3"),
+        "B1": CellModel(ref="B1", f="D1*2"),
+        "B2": CellModel(ref="B2", v="10"),  # hardcoded value -> no gap
+        "B3": CellModel(ref="B3", f="D3*2"),
+        "C1": CellModel(ref="C1", f="E1-1"),
+        "C2": CellModel(ref="C2", f=""),  # empty string formula -> gap
+        "C3": CellModel(ref="C3", f="E3-1"),
+    }
+
+    wb.sheets = {"Sheet1": SheetModel(name="Sheet1", target="", cells=cells)}
+
+    findings = rule.detect(wb)
+    assert len(findings) == 2
+    refs = {f.ref for f in findings}
+    assert refs == {"A2", "C2"}
+
+    # Fix for A2 uses A3's formula "B3+C3" shifted up to "B2+C2"
+    fa2 = next(f for f in findings if f.ref == "A2")
+    ea2 = rule.fix(wb, fa2)
+    assert len(ea2) == 1
+    assert ea2[0].formula == "B2+C2"
+
+    # Fix for C2 uses C3's formula "E3-1" shifted up to "E2-1"
+    fc2 = next(f for f in findings if f.ref == "C2")
+    ec2 = rule.fix(wb, fc2)
+    assert ec2[0].formula == "E2-1"
