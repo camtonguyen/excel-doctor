@@ -1,7 +1,31 @@
+import re
+
 from backend.audit.base import Rule, registry
-from backend.model import Finding
+from backend.model import CellEdit, Edit, Finding
 from backend.workbook.formula import TokenType, tokenize
 from backend.workbook.reader import WorkbookModel
+
+
+def _split_ref(ref: str) -> tuple[str, int]:
+    match = re.match(r"^([A-Z]+)(\d+)$", ref)
+    if match:
+        return match.group(1), int(match.group(2))
+    return "", 0
+
+
+def _get_own_column_refs(formula: str, own_col: str) -> list[int]:
+    tokens = tokenize(formula)
+    rows = []
+    for t in tokens:
+        if t.type == TokenType.OPERAND:
+            val = t.value
+            if "!" in val:
+                val = val.split("!")[-1]
+            for match in re.finditer(r"\b([\$]?[A-Za-z]+)[\$]?(\d+)\b", val):
+                ref_str = match.group(1).replace("$", "").upper()
+                if ref_str == own_col:
+                    rows.append(int(match.group(2)))
+    return rows
 
 
 class RuleR01(Rule):
@@ -142,6 +166,82 @@ class RuleR04(Rule):
         return findings
 
 
+class RuleR06(Rule):
+    id = "R06"
+    title = "Running-balance chain skips a row"
+    why = "A running balance should reference the cell immediately above it. Skipping a row usually indicates a copy-paste error."
+    severity = "warning"
+    risk = "value"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            cols: dict[str, list[tuple[int, str, str]]] = {}
+            for ref, cell in sheet.cells.items():
+                if cell.f:
+                    c, r = _split_ref(ref)
+                    if c:
+                        cols.setdefault(c, []).append((r, ref, cell.f))
+
+            for col, cells in cols.items():
+                links = {}
+                for r, ref, f in cells:
+                    own_col_rows = set(_get_own_column_refs(f, col))
+                    if len(own_col_rows) == 1:
+                        links[r] = own_col_rows.pop()
+
+                correct_count = sum(1 for r, ref_r in links.items() if ref_r == r - 1)
+
+                if correct_count >= 4:
+                    for r, ref, f in cells:
+                        if r in links and links[r] != r - 1:
+                            findings.append(
+                                Finding(
+                                    rule_id=self.id,
+                                    sheet=sheet_name,
+                                    ref=ref,
+                                    description=f"Running balance references row {links[r]} instead of row {r - 1}.",
+                                    severity=self.severity,
+                                    risk=self.risk,
+                                )
+                            )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        sheet = wb.sheets[finding.sheet]
+        cell = sheet.cells[finding.ref]
+        f = cell.f
+        c, r = _split_ref(finding.ref)
+
+        if not f:
+            return []
+
+        tokens = tokenize(f)
+        out = []
+        for t in tokens:
+            if t.type == TokenType.OPERAND:
+                val = t.value
+
+                def repl(m):
+                    col_str = m.group(1).replace("$", "").upper()
+                    if col_str == c:
+                        return f"{m.group(1)}{r - 1}"
+                    return m.group(0)
+
+                val = re.sub(r"\b([\$]?[A-Za-z]+[\$]?)\d+\b", repl, val)
+                out.append(val)
+            else:
+                out.append(t.value)
+        new_f = "".join(out)
+
+        return [
+            CellEdit(
+                op="SetFormula", sheet=finding.sheet, ref=finding.ref, formula=new_f
+            )
+        ]
+
+
 class RuleR05(Rule):
     id = "R05"
     title = "Reference to a sheet that doesn't exist"
@@ -229,4 +329,5 @@ registry.register(RuleR02())
 registry.register(RuleR03())
 registry.register(RuleR04())
 registry.register(RuleR05())
+registry.register(RuleR06())
 registry.register(RuleR20())

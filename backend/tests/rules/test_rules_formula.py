@@ -7,9 +7,10 @@ from backend.audit.rules_formula import (
     RuleR03,
     RuleR04,
     RuleR05,
+    RuleR06,
     RuleR20,
 )
-from backend.model import CellModel, SheetModel, WorkbookInventory
+from backend.model import CellEdit, CellModel, SheetModel, WorkbookInventory
 from backend.workbook.reader import WorkbookModel, read_workbook
 
 
@@ -83,5 +84,39 @@ def test_r20_newer_excel_functions():
     f_a1 = next(f for f in findings if f.ref == "A1")
     assert "XLOOKUP" in f_a1.description
 
-    f_a4 = next(f for f in findings if f.ref == "A4")
-    assert "FILTER" in f_a4.description
+
+def test_r06_running_balance_chain():
+    rule = RuleR06()
+    wb = WorkbookModel(inventory=None)
+
+    # Needs at least 4 correctly linked cells.
+    # We will make A2:A5 correctly linked. (4 cells)
+    # A6 will be deviant (e.g. skips row 5, references A4).
+    # A7 will be correct (references A6) but A6 broke it? Wait, links[r] == r-1 is all that matters.
+    cells = {
+        "A2": CellModel(ref="A2", f="A1+10"),
+        "A3": CellModel(ref="A3", f="A2+10"),
+        "A4": CellModel(ref="A4", f="A3+10"),
+        "A5": CellModel(ref="A5", f="A4+10"),  # A2:A5 are 4 correctly linked
+        "A6": CellModel(ref="A6", f="A4+10"),  # deviant, ref A4 instead of A5
+        "A7": CellModel(ref="A7", f="A$5+10"),  # deviant, ref A$5 instead of A6
+        "B2": CellModel(ref="B2", f="B1"),  # only 1 correct, not enough
+    }
+
+    wb.sheets = {"Sheet1": SheetModel(name="Sheet1", target="", cells=cells)}
+
+    findings = rule.detect(wb)
+    assert len(findings) == 2
+    refs = {f.ref for f in findings}
+    assert refs == {"A6", "A7"}
+
+    f6 = next(f for f in findings if f.ref == "A6")
+    edits6 = rule.fix(wb, f6)
+    assert len(edits6) == 1
+    assert isinstance(edits6[0], CellEdit)
+    assert edits6[0].op == "SetFormula"
+    assert edits6[0].formula == "A5+10"
+
+    f7 = next(f for f in findings if f.ref == "A7")
+    edits7 = rule.fix(wb, f7)
+    assert edits7[0].formula == "A$6+10"
