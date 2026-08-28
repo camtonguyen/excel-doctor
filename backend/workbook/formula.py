@@ -72,3 +72,17 @@ def rename_sheet_in_formula(formula: str, old_name: str, new_name: str) -> str:
             out.append(t.value)
 
     return "".join(out)
+
+
+def is_sheet_referenced_in_formula(formula: str, sheet_name: str) -> bool:
+    """Returns True if the sheet name is referenced in the formula."""
+    tokens = tokenize(formula)
+    escaped = sheet_name.replace("'", "''")
+    quoted = f"'{escaped}'"
+    pattern = re.compile(
+        r"(^|:)(?:" + re.escape(sheet_name) + r"|" + re.escape(quoted) + r")!"
+    )
+    for t in tokens:
+        if t.type == TokenType.OPERAND and pattern.search(t.value):
+            return True
+    return False

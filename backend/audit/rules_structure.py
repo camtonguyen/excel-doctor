@@ -194,6 +194,55 @@ class RuleR22(Rule):
         return [WorkbookEdit(op="DeleteDefinedName", name=finding.ref)]
 
 
+class RuleR23(Rule):
+    id = "R23"
+    title = "Stray empty sheet"
+    why = "Empty sheets that are not referenced in any formula or defined name are likely leftovers and should be removed."
+    severity = "style"
+    risk = "safe"
+    auto_fixable = False
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        from backend.workbook.formula import is_sheet_referenced_in_formula
+
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            if sheet.cells:
+                continue
+
+            referenced = False
+            for other_sheet in wb.sheets.values():
+                if referenced:
+                    break
+                for cell in other_sheet.cells.values():
+                    if cell.f and is_sheet_referenced_in_formula(cell.f, sheet_name):
+                        referenced = True
+                        break
+
+            if not referenced:
+                for formula in wb.defined_names.values():
+                    if is_sheet_referenced_in_formula(formula, sheet_name):
+                        referenced = True
+                        break
+
+            if not referenced:
+                findings.append(
+                    Finding(
+                        rule_id=self.id,
+                        sheet=sheet_name,
+                        ref="Sheet",
+                        description=f"Sheet '{sheet_name}' is empty and not referenced anywhere.",
+                        severity=self.severity,
+                        risk=self.risk,
+                    )
+                )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        return [SheetEdit(op="DeleteSheet", sheet=finding.sheet)]
+
+
 registry.register(RuleR15())
 registry.register(RuleR21())
 registry.register(RuleR22())
+registry.register(RuleR23())

@@ -2,6 +2,7 @@ from backend.audit.rules_structure import (
     RuleR15,
     RuleR21,
     RuleR22,
+    RuleR23,
     _generate_safe_name,
     _is_invalid,
 )
@@ -128,3 +129,30 @@ def test_r22_broken_defined_name():
     assert isinstance(edits[0], WorkbookEdit)
     assert edits[0].op == "DeleteDefinedName"
     assert edits[0].name == "BrokenName"
+
+
+def test_r23_stray_empty_sheet():
+    rule = RuleR23()
+    wb = WorkbookModel(inventory=None)
+
+    cells_ref = {"A1": CellModel(ref="A1", v="1", f="EmptySheet2!A1+1")}
+
+    wb.sheets = {
+        "EmptySheet1": SheetModel(name="EmptySheet1", target="", cells={}),
+        "EmptySheet2": SheetModel(name="EmptySheet2", target="", cells={}),
+        "EmptySheet3": SheetModel(name="EmptySheet3", target="", cells={}),
+        "NonEmptySheet": SheetModel(name="NonEmptySheet", target="", cells=cells_ref),
+    }
+
+    wb.defined_names = {
+        "RefName": "EmptySheet3!$B$2",
+    }
+
+    findings = rule.detect(wb)
+    assert len(findings) == 1
+    assert findings[0].sheet == "EmptySheet1"
+
+    edits = rule.fix(wb, findings[0])
+    assert len(edits) == 1
+    assert edits[0].op == "DeleteSheet"
+    assert edits[0].sheet == "EmptySheet1"
