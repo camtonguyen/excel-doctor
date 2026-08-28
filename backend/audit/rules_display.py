@@ -39,4 +39,50 @@ class RuleR17(Rule):
             ref=finding.ref,
             num_fmt_code="dd/mm/yyyy"
         )]
+class RuleR18(Rule):
+    id = "R18"
+    title = "Fragile format code"
+    why = "Format codes with locale-specific prefixes or unusual escaping can break when opened in different regions or older spreadsheet software."
+    severity = "style"
+    risk = "display"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            for ref, cell in sheet.cells.items():
+                if cell.num_fmt and (
+                    "_)" in cell.num_fmt or 
+                    "\\(" in cell.num_fmt or 
+                    re.search(r"\[\$-[^\]]+\]", cell.num_fmt) or
+                    "[Red]" in cell.num_fmt
+                ):
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            sheet=sheet_name,
+                            ref=ref,
+                            description=f"Fragile format code '{cell.num_fmt}'",
+                            severity=self.severity,
+                            risk=self.risk
+                        )
+                    )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        cell = wb.sheets[finding.sheet].cells[finding.ref]
+        new_fmt = cell.num_fmt
+        new_fmt = new_fmt.replace("_)", "")
+        new_fmt = new_fmt.replace("\\(", "(")
+        new_fmt = new_fmt.replace("\\)", ")")
+        new_fmt = re.sub(r"\[\$-[^\]]+\]", "", new_fmt)
+        new_fmt = new_fmt.replace("[Red]", "")
+        return [CellEdit(
+            op="SetNumFmt",
+            sheet=finding.sheet,
+            ref=finding.ref,
+            num_fmt_code=new_fmt
+        )]
+
 registry.register(RuleR17())
+registry.register(RuleR18())
