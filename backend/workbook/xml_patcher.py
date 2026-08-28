@@ -5,7 +5,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from backend.model import CellEdit, Edit, SheetEdit
+from backend.model import CellEdit, Edit, SheetEdit, WorkbookEdit
 from backend.workbook.formula import rename_sheet_in_formula
 from backend.workbook.styles import ensure_xf
 
@@ -107,14 +107,25 @@ def apply_edits(
     cell_edits_by_sheet = defaultdict(list)
     rename_map = {}
     dimension_map = {}
+    deleted_defined_names = set()
 
     for edit in edits:
         if isinstance(edit, CellEdit):
             cell_edits_by_sheet[edit.sheet].append(edit)
-        elif isinstance(edit, SheetEdit) and edit.op == "RenameSheet" and edit.new_name is not None:
+        elif (
+            isinstance(edit, SheetEdit)
+            and edit.op == "RenameSheet"
+            and edit.new_name is not None
+        ):
             rename_map[edit.sheet] = edit.new_name
-        elif isinstance(edit, SheetEdit) and edit.op == "SetDimension" and edit.dimension is not None:
+        elif (
+            isinstance(edit, SheetEdit)
+            and edit.op == "SetDimension"
+            and edit.dimension is not None
+        ):
             dimension_map[edit.sheet] = edit.dimension
+        elif isinstance(edit, WorkbookEdit) and edit.op == "DeleteDefinedName":
+            deleted_defined_names.add(edit.name)
 
     with zipfile.ZipFile(input_path, "r") as zin:
         sheet_targets = get_sheet_targets(zin)
@@ -244,7 +255,12 @@ def apply_edits(
 
                 if item.filename == "xl/workbook.xml":
 
-                    def mutate_workbook(root, ns, rename_map=rename_map):
+                    def mutate_workbook(
+                        root,
+                        ns,
+                        rename_map=rename_map,
+                        deleted_defined_names=deleted_defined_names,
+                    ):
                         calc_pr = root.find(f"{ns}calcPr")
                         if calc_pr is None:
                             calc_pr = etree.SubElement(root, f"{ns}calcPr")
@@ -259,10 +275,15 @@ def apply_edits(
                                     if name in rename_map:
                                         sheet_node.set("name", rename_map[name])
 
-                            # Apply renames to <definedName> elements
+                            # Apply renames and deletions to <definedName> elements
                             defined_names = root.find(f"{ns}definedNames")
                             if defined_names is not None:
-                                for dn in defined_names.iter(f"{ns}definedName"):
+                                for dn in list(defined_names.iter(f"{ns}definedName")):
+                                    dn_name = dn.get("name")
+                                    if dn_name in deleted_defined_names:
+                                        dn.getparent().remove(dn)
+                                        continue
+
                                     if dn.text:
                                         new_text = dn.text
                                         for old_name, new_name in rename_map.items():

@@ -89,7 +89,12 @@ class SheetEdit(BaseModel):
     dimension: str | None = None
 
 
-Edit = CellEdit | SheetEdit
+class WorkbookEdit(BaseModel):
+    op: Literal["DeleteDefinedName"]
+    name: str
+
+
+Edit = CellEdit | SheetEdit | WorkbookEdit
 
 
 class DiffEntry(BaseModel):
