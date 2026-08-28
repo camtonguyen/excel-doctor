@@ -71,3 +71,70 @@ def ensure_xf(root: etree._Element, ns: str, base_xf_index: int, num_fmt_code: s
     cell_xfs.set("count", str(count + 1))
     
     return len(xfs)
+
+def ensure_font_xf(root: etree._Element, ns: str, base_xf_index: int, font_name: str | None, font_size: str | None) -> int:
+    """
+    Safely adds or reuses a cell format (xf) with the given font name and size,
+    without mutating the original xf.
+    """
+    fonts = root.find(f"{ns}fonts")
+    if fonts is None:
+        fonts = etree.Element(f"{ns}fonts", count="0")
+        numFmts = root.find(f"{ns}numFmts")
+        if numFmts is not None:
+            numFmts.addnext(fonts)
+        else:
+            root.insert(0, fonts)
+
+    font_id = None
+    existing_fonts = fonts.findall(f"{ns}font")
+    for i, font in enumerate(existing_fonts):
+        name_node = font.find(f"{ns}name")
+        sz_node = font.find(f"{ns}sz")
+        cur_name = name_node.get("val") if name_node is not None else None
+        cur_sz = sz_node.get("val") if sz_node is not None else None
+        if cur_name == font_name and cur_sz == font_size:
+            font_id = i
+            break
+
+    if font_id is None:
+        font_id = len(existing_fonts)
+        new_font = etree.SubElement(fonts, f"{ns}font")
+        if font_size is not None:
+            etree.SubElement(new_font, f"{ns}sz", val=font_size)
+        if font_name is not None:
+            etree.SubElement(new_font, f"{ns}name", val=font_name)
+        count = int(fonts.get("count", "0"))
+        fonts.set("count", str(count + 1))
+
+    cell_xfs = root.find(f"{ns}cellXfs")
+    if cell_xfs is None:
+        return 0
+
+    xfs = cell_xfs.findall(f"{ns}xf")
+    if 0 <= base_xf_index < len(xfs):
+        base_xf = xfs[base_xf_index]
+    else:
+        base_xf = xfs[0] if xfs else etree.Element(f"{ns}xf")
+        
+    import copy
+    new_xf = copy.deepcopy(base_xf)
+    new_xf.set("fontId", str(font_id))
+    new_xf.set("applyFont", "1")
+
+    def elements_equal(e1, e2):
+        if e1.tag != e2.tag: return False
+        if e1.text != e2.text: return False
+        if e1.attrib != e2.attrib: return False
+        if len(e1) != len(e2): return False
+        return all(elements_equal(c1, c2) for c1, c2 in zip(e1, e2))
+
+    for i, existing_xf in enumerate(xfs):
+        if elements_equal(existing_xf, new_xf):
+            return i
+
+    cell_xfs.append(new_xf)
+    count = int(cell_xfs.get("count", "0"))
+    cell_xfs.set("count", str(count + 1))
+    
+    return len(xfs)
