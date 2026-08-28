@@ -71,6 +71,8 @@ class RuleR18(Rule):
 
     def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
         cell = wb.sheets[finding.sheet].cells[finding.ref]
+        if not cell.num_fmt:
+            return []
         new_fmt = cell.num_fmt
         new_fmt = new_fmt.replace("_)", "")
         new_fmt = new_fmt.replace("\\(", "(")
