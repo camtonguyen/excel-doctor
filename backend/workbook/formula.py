@@ -10,20 +10,23 @@ class TokenType(Enum):
     WHITESPACE = "WHITESPACE"
     OPERAND = "OPERAND"
 
+
 @dataclass
 class Token:
     type: TokenType
     value: str
 
+
 # Regex that parses Excel formulas into safe, non-overlapping tokens.
 # Order is critical.
 _TOKENIZER_RE = re.compile(
-    r'(?P<STRING>"(?:[^"]|"")*")|'               # "string literals" (escaped as "")
-    r'(?P<FUNCTION>[A-Za-z0-9_À-ỹ\.]+\()|'       # SUM(
-    r'(?P<OPERATOR>[=+\-*/^&<>,:()])|'            # Operators
-    r'(?P<WHITESPACE>\s+)|'                       # Whitespace
-    r'(?P<OPERAND>(?:\'[^\']*\'|[^=+\-*/^&<>,:()\s"])+)' # Operands, including 'quoted sheet'!A1
+    r'(?P<STRING>"(?:[^"]|"")*")|'  # "string literals" (escaped as "")
+    r"(?P<FUNCTION>[A-Za-z0-9_À-ỹ\.]+\()|"  # SUM(
+    r"(?P<OPERATOR>[=+\-*/^&<>,:()])|"  # Operators
+    r"(?P<WHITESPACE>\s+)|"  # Whitespace
+    r'(?P<OPERAND>(?:\'[^\']*\'|[^=+\-*/^&<>,:()\s"])+)'  # Operands, including 'quoted sheet'!A1
 )
+
 
 def tokenize(formula: str) -> list[Token]:
     """
@@ -38,15 +41,16 @@ def tokenize(formula: str) -> list[Token]:
                 break
     return tokens
 
+
 def rename_sheet_in_formula(formula: str, old_name: str, new_name: str) -> str:
     """
     Safely renames sheet references inside a formula, preserving strings and structure.
     """
     tokens = tokenize(formula)
-    
+
     escaped_old = old_name.replace("'", "''")
     quoted_old = f"'{escaped_old}'"
-    
+
     needs_quote = not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new_name)
     if needs_quote:
         escaped_new = new_name.replace("'", "''")
@@ -66,5 +70,5 @@ def rename_sheet_in_formula(formula: str, old_name: str, new_name: str) -> str:
             out.append(val)
         else:
             out.append(t.value)
-            
+
     return "".join(out)

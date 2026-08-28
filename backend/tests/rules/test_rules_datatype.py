@@ -3,7 +3,9 @@ from pathlib import Path
 from backend.audit.rules_datatype import RuleR14
 from backend.workbook.reader import read_workbook
 
-FIXTURE_PATH = Path(__file__).parent.parent.parent.parent / "fixtures" / "whitespace.xlsx"
+FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent.parent / "fixtures" / "whitespace.xlsx"
+)
 
 
 def test_r14_detects_every_whitespace_defect_and_skips_clean_text():

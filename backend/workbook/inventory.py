@@ -10,10 +10,10 @@ def get_inventory(file_path: str | Path) -> WorkbookInventory:
     and whether it requires tier A patching.
     """
     inventory = WorkbookInventory()
-    
+
     with zipfile.ZipFile(file_path, "r") as z:
         namelist = z.namelist()
-        
+
         for name in namelist:
             if name.startswith("xl/charts/"):
                 inventory.has_charts = True

@@ -6,6 +6,7 @@ from backend.model import Edit, Finding
 
 class Rule:
     """Base class for all audit rules."""
+
     id: str
     title: str
     why: str
@@ -21,6 +22,7 @@ class Rule:
         """Returns the edits required to fix the finding."""
         raise NotImplementedError
 
+
 class RuleRegistry:
     def __init__(self):
         self.rules: dict[str, Rule] = {}
@@ -30,5 +32,6 @@ class RuleRegistry:
 
     def get_all(self) -> list[Rule]:
         return list(self.rules.values())
+
 
 registry = RuleRegistry()
