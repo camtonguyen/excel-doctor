@@ -121,7 +121,13 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
             if sheet_model.target in z.namelist():
                 with z.open(sheet_model.target) as f:
                     tree = etree.parse(f)
-                    for c_node in tree.getroot().iter("{*}c"):
+                    root = tree.getroot()
+                    
+                    dim_node = root.find("{*}dimension")
+                    if dim_node is not None:
+                        sheet_model.dimension = dim_node.get("ref")
+                        
+                    for c_node in root.iter("{*}c"):
                         ref = c_node.get("r")
                         t = c_node.get("t")
                         s_idx = int(c_node.get("s", "0"))

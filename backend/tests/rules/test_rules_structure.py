@@ -1,5 +1,10 @@
-from backend.audit.rules_structure import RuleR15, _generate_safe_name, _is_invalid
-from backend.model import SheetModel
+from backend.audit.rules_structure import (
+    RuleR15,
+    RuleR21,
+    _generate_safe_name,
+    _is_invalid,
+)
+from backend.model import CellModel, SheetModel
 from backend.workbook.reader import WorkbookModel
 
 
@@ -62,3 +67,38 @@ def test_rule_r15_detect_and_fix():
     edits2 = rule.fix(wb, findings[1])
     assert len(edits2) == 1
     assert edits2[0].new_name == "A" * 31
+
+def test_r21_bloated_used_range():
+    rule = RuleR21()
+    wb = WorkbookModel(inventory=None)
+    
+    cells2 = {
+        "A1": CellModel(ref="A1", v="1"),
+        "B2": CellModel(ref="B2", v="2"),
+    }
+    
+    cells3 = {
+        "A1": CellModel(ref="A1", v="1"),
+        "C3": CellModel(ref="C3", v="3"),
+    }
+    
+    wb.sheets = {
+        "Empty": SheetModel(name="Empty", target="", cells={}, dimension="A1:Z100"),
+        "Bloated": SheetModel(name="Bloated", target="", cells=cells2, dimension="A1:Z102"),
+        "Good": SheetModel(name="Good", target="", cells=cells3, dimension="A1:C3"),
+    }
+    
+    findings = rule.detect(wb)
+    assert len(findings) == 2
+    sheets = {f.sheet for f in findings}
+    assert sheets == {"Empty", "Bloated"}
+    
+    f_empty = next(f for f in findings if f.sheet == "Empty")
+    edits_empty = rule.fix(wb, f_empty)
+    assert edits_empty[0].op == "SetDimension"
+    assert edits_empty[0].dimension == "A1"
+    
+    f_bloated = next(f for f in findings if f.sheet == "Bloated")
+    edits_bloated = rule.fix(wb, f_bloated)
+    assert edits_bloated[0].op == "SetDimension"
+    assert edits_bloated[0].dimension == "A1:B2"
