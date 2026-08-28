@@ -108,6 +108,7 @@ def apply_edits(
     rename_map = {}
     dimension_map = {}
     deleted_defined_names = set()
+    deleted_sheets = set()
 
     for edit in edits:
         if isinstance(edit, CellEdit):
@@ -124,11 +125,17 @@ def apply_edits(
             and edit.dimension is not None
         ):
             dimension_map[edit.sheet] = edit.dimension
+        elif isinstance(edit, SheetEdit) and edit.op == "DeleteSheet":
+            deleted_sheets.add(edit.sheet)
         elif isinstance(edit, WorkbookEdit) and edit.op == "DeleteDefinedName":
             deleted_defined_names.add(edit.name)
 
     with zipfile.ZipFile(input_path, "r") as zin:
         sheet_targets = get_sheet_targets(zin)
+        deleted_targets = {
+            sheet_targets[name] for name in deleted_sheets if name in sheet_targets
+        }
+
         calc_chain_dropped = _any_formula_changed(
             zin, sheet_targets, cell_edits_by_sheet, rename_map
         )
@@ -167,6 +174,9 @@ def apply_edits(
                     continue
 
                 if item.filename == "xl/calcChain.xml" and calc_chain_dropped:
+                    continue
+
+                if item.filename in deleted_targets:
                     continue
 
                 # If this item is a sheet XML, we must check if we need to apply CellEdits OR RenameMap (update references)
@@ -260,19 +270,22 @@ def apply_edits(
                         ns,
                         rename_map=rename_map,
                         deleted_defined_names=deleted_defined_names,
+                        deleted_sheets=deleted_sheets,
                     ):
                         calc_pr = root.find(f"{ns}calcPr")
                         if calc_pr is None:
                             calc_pr = etree.SubElement(root, f"{ns}calcPr")
                         calc_pr.set("fullCalcOnLoad", "1")
 
-                        # Apply renames to <sheet> elements
-                        if rename_map:
+                        # Apply renames and deletions to <sheet> elements
+                        if rename_map or deleted_sheets:
                             sheets_node = root.find(f"{ns}sheets")
                             if sheets_node is not None:
-                                for sheet_node in sheets_node.iter(f"{ns}sheet"):
+                                for sheet_node in list(sheets_node.iter(f"{ns}sheet")):
                                     name = sheet_node.get("name")
-                                    if name in rename_map:
+                                    if name in deleted_sheets:
+                                        sheet_node.getparent().remove(sheet_node)
+                                    elif name in rename_map:
                                         sheet_node.set("name", rename_map[name])
 
                             # Apply renames and deletions to <definedName> elements
@@ -324,11 +337,21 @@ def apply_edits(
                     _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_styles)
                     continue
 
-                if calc_chain_dropped and item.filename == "[Content_Types].xml":
+                if (
+                    calc_chain_dropped or deleted_targets
+                ) and item.filename == "[Content_Types].xml":
 
-                    def mutate_content_types(root, ns):
-                        for override in root.iter(f"{ns}Override"):
-                            if override.get("PartName") == "/xl/calcChain.xml":
+                    def mutate_content_types(root, ns, deleted_targets=deleted_targets):
+                        for override in list(root.iter(f"{ns}Override")):
+                            part = override.get("PartName")
+                            if calc_chain_dropped and part == "/xl/calcChain.xml":
+                                override.getparent().remove(override)
+                                continue
+                            if (
+                                deleted_targets
+                                and part
+                                and part.lstrip("/") in deleted_targets
+                            ):
                                 override.getparent().remove(override)
 
                     _rewrite_xml_part(
@@ -336,13 +359,23 @@ def apply_edits(
                     )
                     continue
 
-                if calc_chain_dropped and item.filename == "xl/_rels/workbook.xml.rels":
+                if (
+                    calc_chain_dropped or deleted_targets
+                ) and item.filename == "xl/_rels/workbook.xml.rels":
 
-                    def mutate_rels(root, ns):
-                        for rel in root.iter(f"{ns}Relationship"):
-                            if rel.get("Target") in (
+                    def mutate_rels(root, ns, deleted_targets=deleted_targets):
+                        for rel in list(root.iter(f"{ns}Relationship")):
+                            target = rel.get("Target")
+                            if calc_chain_dropped and target in (
                                 "calcChain.xml",
                                 "/xl/calcChain.xml",
+                            ):
+                                rel.getparent().remove(rel)
+                                continue
+                            if (
+                                deleted_targets
+                                and target
+                                and f"xl/{target}" in deleted_targets
                             ):
                                 rel.getparent().remove(rel)
 

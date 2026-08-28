@@ -83,7 +83,7 @@ class CellEdit(BaseModel):
 
 
 class SheetEdit(BaseModel):
-    op: Literal["RenameSheet", "SetDimension"]
+    op: Literal["RenameSheet", "SetDimension", "DeleteSheet"]
     sheet: str
     new_name: str | None = None
     dimension: str | None = None
