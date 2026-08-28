@@ -17,6 +17,7 @@ class SheetModel(BaseModel):
     name: str
     target: str  # e.g. "worksheets/sheet1.xml"
     cells: dict[str, CellModel] = Field(default_factory=dict)
+    dimension: str | None = None
 
 
 class WorkbookInventory(BaseModel):
@@ -82,9 +83,10 @@ class CellEdit(BaseModel):
 
 
 class SheetEdit(BaseModel):
-    op: Literal["RenameSheet"]
+    op: Literal["RenameSheet", "SetDimension"]
     sheet: str
-    new_name: str
+    new_name: str | None = None
+    dimension: str | None = None
 
 
 Edit = CellEdit | SheetEdit

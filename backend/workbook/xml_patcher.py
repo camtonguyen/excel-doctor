@@ -106,12 +106,15 @@ def apply_edits(
 ) -> None:
     cell_edits_by_sheet = defaultdict(list)
     rename_map = {}
+    dimension_map = {}
 
     for edit in edits:
         if isinstance(edit, CellEdit):
             cell_edits_by_sheet[edit.sheet].append(edit)
-        elif isinstance(edit, SheetEdit) and edit.op == "RenameSheet":
+        elif isinstance(edit, SheetEdit) and edit.op == "RenameSheet" and edit.new_name is not None:
             rename_map[edit.sheet] = edit.new_name
+        elif isinstance(edit, SheetEdit) and edit.op == "SetDimension" and edit.dimension is not None:
+            dimension_map[edit.sheet] = edit.dimension
 
     with zipfile.ZipFile(input_path, "r") as zin:
         sheet_targets = get_sheet_targets(zin)
@@ -168,9 +171,11 @@ def apply_edits(
                     sheet_name_str: str = target_sheet_name
                     has_cell_edits = sheet_name_str in cell_edits_by_sheet
                     has_renames = len(rename_map) > 0
+                    has_dimension_edits = sheet_name_str in dimension_map
 
-                    if has_cell_edits or has_renames:
+                    if has_cell_edits or has_renames or has_dimension_edits:
                         sheet_edits = cell_edits_by_sheet.get(sheet_name_str, [])
+                        new_dimension = dimension_map.get(sheet_name_str)
 
                         def mutate_sheet(
                             root,
@@ -180,7 +185,13 @@ def apply_edits(
                             has_renames=has_renames,
                             sheet_name=sheet_name_str,
                             new_s_map=new_s_map,
+                            new_dimension=new_dimension,
                         ):
+                            if new_dimension is not None:
+                                dim_node = root.find(f"{ns}dimension")
+                                if dim_node is not None:
+                                    dim_node.set("ref", new_dimension)
+
                             for c_node in root.iter(f"{ns}c"):
                                 ref = c_node.get("r")
 

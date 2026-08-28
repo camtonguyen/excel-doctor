@@ -68,4 +68,91 @@ class RuleR15(Rule):
         return [SheetEdit(op="RenameSheet", sheet=finding.sheet, new_name=new_name)]
 
 
+def _col_to_num(col_str: str) -> int:
+    num = 0
+    for c in col_str:
+        num = num * 26 + (ord(c.upper()) - ord('A') + 1)
+    return num
+
+def _num_to_col(n: int) -> str:
+    string = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        string = chr(65 + remainder) + string
+    return string
+
+def _parse_ref(ref: str) -> tuple[int, int]:
+    match = re.match(r"([A-Z]+)(\d+)", ref)
+    if not match:
+        return 1, 1
+    col = _col_to_num(match.group(1))
+    row = int(match.group(2))
+    return col, row
+
+class RuleR21(Rule):
+    id = "R21"
+    title = "Bloated used range"
+    why = "Declared dimension far exceeds the last cell with content, causing file bloat and performance issues."
+    severity = "style"
+    risk = "safe"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            if not sheet.dimension or ":" not in sheet.dimension:
+                continue
+            
+            _, end = sheet.dimension.split(":")
+            declared_max_col, declared_max_row = _parse_ref(end)
+            
+            if not sheet.cells:
+                # If no cells but dimension declared e.g. A1:Z100
+                if declared_max_row > 1 or declared_max_col > 1:
+                    findings.append(Finding(
+                        rule_id=self.id,
+                        sheet=sheet_name,
+                        ref=sheet.dimension,
+                        description=f"Declared dimension {sheet.dimension} for empty sheet.",
+                        severity=self.severity,
+                        risk=self.risk
+                    ))
+                continue
+                
+            actual_max_col = 1
+            actual_max_row = 1
+            for ref in sheet.cells:
+                c, r = _parse_ref(ref)
+                actual_max_col = max(actual_max_col, c)
+                actual_max_row = max(actual_max_row, r)
+                    
+            if declared_max_row > actual_max_row + 100 or declared_max_col > actual_max_col + 20:
+                findings.append(Finding(
+                    rule_id=self.id,
+                    sheet=sheet_name,
+                    ref=sheet.dimension,
+                    description=f"Declared dimension {sheet.dimension} far exceeds actual content (max row {actual_max_row}, max col {_num_to_col(actual_max_col)}).",
+                    severity=self.severity,
+                    risk=self.risk
+                ))
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        sheet = wb.sheets[finding.sheet]
+        
+        if not sheet.cells:
+            return [SheetEdit(op="SetDimension", sheet=finding.sheet, dimension="A1")]
+            
+        actual_max_col = 1
+        actual_max_row = 1
+        for ref in sheet.cells:
+            c, r = _parse_ref(ref)
+            actual_max_col = max(actual_max_col, c)
+            actual_max_row = max(actual_max_row, r)
+                
+        new_dim = f"A1:{_num_to_col(actual_max_col)}{actual_max_row}"
+        return [SheetEdit(op="SetDimension", sheet=finding.sheet, dimension=new_dim)]
+
+
 registry.register(RuleR15())
+registry.register(RuleR21())
