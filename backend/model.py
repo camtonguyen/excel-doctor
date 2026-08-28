@@ -9,6 +9,8 @@ class CellModel(BaseModel):
     v: str | None = None  # value
     f: str | None = None  # formula
     num_fmt: str | None = None  # resolved number format string
+    font_name: str | None = None
+    font_size: str | None = None
 
 class SheetModel(BaseModel):
     name: str
@@ -61,13 +63,15 @@ class Finding(BaseModel):
     risk: Literal["safe", "display", "value"]
 
 class CellEdit(BaseModel):
-    op: Literal["SetValue", "SetFormula", "SetNumFmt", "ClearCell"]
+    op: Literal["SetValue", "SetFormula", "SetNumFmt", "ClearCell", "SetFont"]
     sheet: str
     ref: str
     value: Any = None
     cell_type: str | None = None
     formula: str | None = None
     num_fmt_code: str | None = None
+    font_name: str | None = None
+    font_size: str | None = None
 
 class SheetEdit(BaseModel):
     op: Literal["RenameSheet"]

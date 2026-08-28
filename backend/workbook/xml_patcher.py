@@ -94,14 +94,14 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
         sheet_targets = get_sheet_targets(zin)
         calc_chain_dropped = _any_formula_changed(zin, sheet_targets, cell_edits_by_sheet, rename_map)
 
-        has_numfmt_edits = any(isinstance(e, CellEdit) and e.op == "SetNumFmt" for e in edits)
+        has_style_edits = any(isinstance(e, CellEdit) and e.op in ("SetNumFmt", "SetFont") for e in edits)
         original_s: dict[tuple[str, str], int] = {}
         new_s_map: dict[tuple[str, str], int] = {}
         
-        if has_numfmt_edits:
+        if has_style_edits:
             for sheet_name, sheet_edits in cell_edits_by_sheet.items():
-                numfmt_refs = {e.ref for e in sheet_edits if e.op == "SetNumFmt"}
-                if not numfmt_refs:
+                style_refs = {e.ref for e in sheet_edits if e.op in ("SetNumFmt", "SetFont")}
+                if not style_refs:
                     continue
                 target = sheet_targets.get(sheet_name)
                 if not target or target not in zin.namelist():
@@ -111,7 +111,7 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
                 ns = _ns(root, SPREADSHEET_NS)
                 for c_node in root.iter(f"{ns}c"):
                     ref = c_node.get("r")
-                    if ref in numfmt_refs:
+                    if ref in style_refs:
                         original_s[(sheet_name, ref)] = int(c_node.get("s", "0"))
 
         # ponytail: zip format doesn't record deflate level as metadata, so only
@@ -172,7 +172,7 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
                                         f_node = etree.SubElement(c_node, f"{ns}f")
                                         f_node.text = str(edit.formula)
 
-                                    elif edit.op == "SetNumFmt":
+                                    elif edit.op in ("SetNumFmt", "SetFont"):
                                         new_s = new_s_map.get((sheet_name, edit.ref))
                                         if new_s is not None:
                                             c_node.set("s", str(new_s))
@@ -212,13 +212,18 @@ def apply_edits(input_path: str | Path, output_path: str | Path, edits: Sequence
                     _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_workbook)
                     continue
 
-                if item.filename == "xl/styles.xml" and has_numfmt_edits:
+                if item.filename == "xl/styles.xml" and has_style_edits:
                     def mutate_styles(root, ns, original_s=original_s, cell_edits_by_sheet=cell_edits_by_sheet, new_s_map=new_s_map):
+                        from backend.workbook.styles import ensure_font_xf
                         for sheet_name, sheet_edits in cell_edits_by_sheet.items():
                             for edit in sheet_edits:
                                 if edit.op == "SetNumFmt" and edit.num_fmt_code:
                                     old_s = original_s.get((sheet_name, edit.ref), 0)
                                     new_s = ensure_xf(root, ns, old_s, edit.num_fmt_code)
+                                    new_s_map[(sheet_name, edit.ref)] = new_s
+                                elif edit.op == "SetFont":
+                                    old_s = original_s.get((sheet_name, edit.ref), 0)
+                                    new_s = ensure_font_xf(root, ns, old_s, edit.font_name, edit.font_size)
                                     new_s_map[(sheet_name, edit.ref)] = new_s
 
                     _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_styles)

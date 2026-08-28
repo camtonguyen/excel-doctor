@@ -69,7 +69,9 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         
         # 3. Parse styles to map cell format index to actual number format string
         cell_xfs_num_fmt_ids = []
+        cell_xfs_font_ids = []
         custom_num_fmts = {}
+        fonts = {} # id -> (name, size)
         if "xl/styles.xml" in z.namelist():
             with z.open("xl/styles.xml") as f:
                 tree = etree.parse(f)
@@ -83,11 +85,22 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         code = numFmt.get("formatCode", "")
                         custom_num_fmts[fmt_id] = code
                         
+                # Extract fonts
+                fonts_node = root.find("{*}fonts")
+                if fonts_node is not None:
+                    for i, font in enumerate(fonts_node.iter("{*}font")):
+                        name_node = font.find("{*}name")
+                        sz_node = font.find("{*}sz")
+                        name = name_node.get("val") if name_node is not None else None
+                        sz = sz_node.get("val") if sz_node is not None else None
+                        fonts[i] = (name, sz)
+                        
                 # Extract cellXfs
                 cellXfs_node = root.find("{*}cellXfs")
                 if cellXfs_node is not None:
                     for xf in cellXfs_node.iter("{*}xf"):
                         cell_xfs_num_fmt_ids.append(int(xf.get("numFmtId", "0")))
+                        cell_xfs_font_ids.append(int(xf.get("fontId", "0")))
 
         # Define basic built-in date formats (to cover common R17 ambiguous dates)
         BUILTIN_FMTS = {
@@ -115,10 +128,15 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         formula = f_node.text if f_node is not None else None
                         
                         num_fmt = None
+                        font_name = None
+                        font_size = None
                         if s_idx < len(cell_xfs_num_fmt_ids):
                             fmt_id = cell_xfs_num_fmt_ids[s_idx]
                             num_fmt = custom_num_fmts.get(fmt_id) or BUILTIN_FMTS.get(fmt_id)
+                        if s_idx < len(cell_xfs_font_ids):
+                            f_id = cell_xfs_font_ids[s_idx]
+                            font_name, font_size = fonts.get(f_id, (None, None))
                         
-                        sheet_model.cells[ref] = CellModel(ref=ref, t=t, v=v, f=formula, num_fmt=num_fmt)
+                        sheet_model.cells[ref] = CellModel(ref=ref, t=t, v=v, f=formula, num_fmt=num_fmt, font_name=font_name, font_size=font_size)
                         
     return wb

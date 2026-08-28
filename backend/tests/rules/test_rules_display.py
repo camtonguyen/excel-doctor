@@ -1,4 +1,4 @@
-from backend.audit.rules_display import RuleR17, RuleR18
+from backend.audit.rules_display import RuleR17, RuleR18, RuleR19
 from backend.model import CellModel, SheetModel, WorkbookInventory
 from backend.workbook.reader import WorkbookModel
 
@@ -87,4 +87,35 @@ def test_r18_fragile_format_codes():
     f_a3 = next(f for f in findings if f.ref == "A3")
     edits_a3 = rule.fix(wb, f_a3)
     assert edits_a3[0].num_fmt_code == "#,##0.00;-#,##0.00"
+
+def test_r19_inconsistent_fonts():
+    rule = RuleR19()
+    
+    wb = WorkbookModel(inventory=WorkbookInventory())
+    cells = {}
+    
+    # Create 199 cells with Arial 11 (the majority)
+    for i in range(1, 200):
+        cells[f"A{i}"] = CellModel(ref=f"A{i}", v="text", font_name="Arial", font_size="11")
+        
+    # Create 1 cell with a minority font (this is < 1% of the 100 cells)
+    cells["B1"] = CellModel(ref="B1", v="text", font_name="Calibri", font_size="10")
+    
+    wb.sheets = {
+        "Sheet1": SheetModel(
+            name="Sheet1",
+            target="worksheets/sheet1.xml",
+            cells=cells
+        )
+    }
+    
+    findings = rule.detect(wb)
+    assert len(findings) == 1
+    assert findings[0].ref == "B1"
+    
+    edits = rule.fix(wb, findings[0])
+    assert len(edits) == 1
+    assert edits[0].op == "SetFont"
+    assert edits[0].font_name == "Arial"
+    assert edits[0].font_size == "11"
 
