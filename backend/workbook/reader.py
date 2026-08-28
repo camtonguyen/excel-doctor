@@ -15,6 +15,7 @@ class WorkbookModel:
         self.inventory = inventory
         self.sheets: dict[str, SheetModel] = {}
         self.shared_strings: list[str] = []
+        self.defined_names: dict[str, str] = {}
 
     def iter_cells(self) -> Iterator[tuple[str, str, CellModel]]:
         """Yields (sheet_name, ref, cell) for every cell in every sheet."""
@@ -72,6 +73,13 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                     if name and target:
                         wb.sheets[name] = SheetModel(name=name, target=target)
 
+                defined_names_node = tree.getroot().find("{*}definedNames")
+                if defined_names_node is not None:
+                    for dn in defined_names_node.iter("{*}definedName"):
+                        dn_name = dn.get("name")
+                        if dn_name and dn.text:
+                            wb.defined_names[dn_name] = dn.text
+
         # 3. Parse styles to map cell format index to actual number format string
         cell_xfs_num_fmt_ids = []
         cell_xfs_font_ids = []
@@ -122,11 +130,11 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                 with z.open(sheet_model.target) as f:
                     tree = etree.parse(f)
                     root = tree.getroot()
-                    
+
                     dim_node = root.find("{*}dimension")
                     if dim_node is not None:
                         sheet_model.dimension = dim_node.get("ref")
-                        
+
                     for c_node in root.iter("{*}c"):
                         ref = c_node.get("r")
                         t = c_node.get("t")
