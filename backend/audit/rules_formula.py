@@ -442,7 +442,11 @@ class RuleR08(Rule):
 
             for col, cells in cols.items():
                 rows = sorted(cells.keys())
-                patterns = {r: _normalize_to_relative(cells[r].f, r) for r in rows}
+                patterns = {
+                    r: _normalize_to_relative(f, r)
+                    for r in rows
+                    if (f := cells[r].f) is not None
+                }
                 
                 for r in rows:
                     if r - 1 in patterns and r + 1 in patterns and patterns[r - 1] == patterns[r + 1] and patterns[r] != patterns[r - 1]:
