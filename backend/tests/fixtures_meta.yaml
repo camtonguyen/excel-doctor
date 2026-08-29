@@ -15,3 +15,7 @@ fixtures:
     description: "Simple file, safe for tier B"
     inventory:
       requires_tier_a: false
+  r08_outlier.xlsx:
+    description: "File with formula outlier for R08"
+    inventory:
+      requires_tier_a: false

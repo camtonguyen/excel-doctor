@@ -156,3 +156,21 @@ def test_r07_empty_cell_breaks_chain():
     fc2 = next(f for f in findings if f.ref == "C2")
     ec2 = rule.fix(wb, fc2)
     assert ec2[0].formula == "E2-1"
+
+def test_r08_formula_outlier():
+    from backend.audit.rules_formula import RuleR08
+    from backend.workbook.reader import read_workbook
+
+    wb = read_workbook("fixtures/r08_outlier.xlsx")
+    rule = RuleR08()
+    findings = rule.detect(wb)
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.ref == "C4"
+
+    # Test fix
+    edits = rule.fix(wb, finding)
+    assert len(edits) == 1
+    assert edits[0].ref == "C4"
+    assert edits[0].formula == "A4*B4"
