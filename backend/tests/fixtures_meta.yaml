@@ -23,3 +23,8 @@ fixtures:
     description: "File with numbers stored as text for R09"
     inventory:
       requires_tier_a: false
+  r10_date_as_text.xlsx:
+    description: "File with dates stored as text for R10"
+    inventory:
+      requires_tier_a: false
+
