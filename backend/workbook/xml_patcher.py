@@ -52,7 +52,11 @@ def get_sheet_targets(zin: zipfile.ZipFile) -> dict[str, str]:
             tree = etree.parse(f)
             for rel in tree.getroot().iter("{*}Relationship"):
                 if "worksheet" in rel.get("Type", ""):
-                    rel_targets[rel.get("Id")] = "xl/" + rel.get("Target")
+                    target_path = rel.get("Target", "")
+                    if target_path.startswith("/"):
+                        rel_targets[rel.get("Id")] = target_path.lstrip("/")
+                    else:
+                        rel_targets[rel.get("Id")] = "xl/" + target_path
 
     if "xl/workbook.xml" in zin.namelist():
         with zin.open("xl/workbook.xml") as f:
