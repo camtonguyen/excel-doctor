@@ -28,6 +28,28 @@ def _get_own_column_refs(formula: str, own_col: str) -> list[int]:
     return rows
 
 
+def _normalize_to_relative(formula: str, base_row: int) -> str:
+    tokens = tokenize(formula)
+    out = []
+    for t in tokens:
+        if t.type == TokenType.OPERAND:
+            val = t.value
+            def repl(m):
+                col_part = m.group(1)
+                abs_row = m.group(2)
+                row_num = int(m.group(3))
+                if abs_row == "$":
+                    return m.group(0)
+                offset = row_num - base_row
+                return f"{col_part}[{offset:+d}]" if offset != 0 else f"{col_part}[0]"
+            
+            val = re.sub(r"(?<![A-Za-z])([\$]?[A-Za-z]+)([\$]?)(\d+)\b", repl, val)
+            out.append(val)
+        else:
+            out.append(t.value)
+    return "".join(out)
+
+
 class RuleR01(Rule):
     id = "R01"
     title = "Formula contains #REF!"
@@ -400,6 +422,82 @@ class RuleR20(Rule):
         return findings
 
 
+class RuleR08(Rule):
+    id = "R08"
+    title = "Công thức lệch chuẩn trong cột"
+    why = "Công thức ô này bị lệch so với các ô khác trong cùng cột. Các dòng trên dưới tính giống nhau, riêng dòng này tính kiểu khác."
+    severity = "warning"
+    risk = "value"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            cols: dict[str, dict[int, CellModel]] = {}
+            for ref, cell in sheet.cells.items():
+                if cell.f:
+                    c, r = _split_ref(ref)
+                    if c:
+                        cols.setdefault(c, {})[r] = cell
+
+            for col, cells in cols.items():
+                rows = sorted(cells.keys())
+                patterns = {
+                    r: _normalize_to_relative(f, r)
+                    for r in rows
+                    if (f := cells[r].f) is not None
+                }
+                
+                for r in rows:
+                    if r - 1 in patterns and r + 1 in patterns and patterns[r - 1] == patterns[r + 1] and patterns[r] != patterns[r - 1]:
+                            findings.append(
+                                Finding(
+                                    rule_id=self.id,
+                                    sheet=sheet_name,
+                                    ref=f"{col}{r}",
+                                    description="Formula is an outlier in its column.",
+                                    severity=self.severity,
+                                    risk=self.risk,
+                                )
+                            )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        sheet = wb.sheets[finding.sheet]
+        c, r = _split_ref(finding.ref)
+        
+        cell_above = sheet.cells.get(f"{c}{r - 1}")
+        if not cell_above or not cell_above.f:
+            return []
+            
+        f_above = cell_above.f
+        
+        tokens = tokenize(f_above)
+        out = []
+        for t in tokens:
+            if t.type == TokenType.OPERAND:
+                val = t.value
+                def repl(m):
+                    col_part = m.group(1)
+                    abs_row = m.group(2)
+                    row_num = int(m.group(3))
+                    if abs_row == "$":
+                        return m.group(0)
+                    new_row = max(1, row_num + 1)
+                    return f"{col_part}{abs_row}{new_row}"
+                val = re.sub(r"(?<![A-Za-z])([\$]?[A-Za-z]+)([\$]?)(\d+)\b", repl, val)
+                out.append(val)
+            else:
+                out.append(t.value)
+        new_f = "".join(out)
+        
+        return [
+            CellEdit(
+                op="SetFormula", sheet=finding.sheet, ref=finding.ref, formula=new_f
+            )
+        ]
+
+
 registry.register(RuleR01())
 registry.register(RuleR02())
 registry.register(RuleR03())
@@ -408,3 +506,4 @@ registry.register(RuleR05())
 registry.register(RuleR06())
 registry.register(RuleR07())
 registry.register(RuleR20())
+registry.register(RuleR08())

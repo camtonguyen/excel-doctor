@@ -59,7 +59,11 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                 tree = etree.parse(f)
                 for rel in tree.getroot().iter("{*}Relationship"):
                     if "worksheet" in rel.get("Type", ""):
-                        sheet_targets[rel.get("Id")] = "xl/" + rel.get("Target")
+                        target_path = rel.get("Target", "")
+                        if target_path.startswith("/"):
+                            sheet_targets[rel.get("Id")] = target_path.lstrip("/")
+                        else:
+                            sheet_targets[rel.get("Id")] = "xl/" + target_path
 
         if "xl/workbook.xml" in z.namelist():
             with z.open("xl/workbook.xml") as f:
