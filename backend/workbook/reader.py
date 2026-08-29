@@ -148,6 +148,12 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         f_node = c_node.find("{*}f")
 
                         v = (v_node.text or "") if v_node is not None else None
+                        if v is None and t == "inlineStr":
+                            is_node = c_node.find("{*}is")
+                            if is_node is not None:
+                                t_node = is_node.find("{*}t")
+                                if t_node is not None:
+                                    v = t_node.text or ""
                         formula = f_node.text if f_node is not None else None
 
                         num_fmt = None

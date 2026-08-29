@@ -19,3 +19,7 @@ fixtures:
     description: "File with formula outlier for R08"
     inventory:
       requires_tier_a: false
+  r09_number_as_text.xlsx:
+    description: "File with numbers stored as text for R09"
+    inventory:
+      requires_tier_a: false
