@@ -157,6 +157,7 @@ def test_r07_empty_cell_breaks_chain():
     ec2 = rule.fix(wb, fc2)
     assert ec2[0].formula == "E2-1"
 
+
 def test_r08_formula_outlier():
     from backend.audit.rules_formula import RuleR08
     from backend.workbook.reader import read_workbook

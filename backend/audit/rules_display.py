@@ -59,7 +59,9 @@ class RuleR11(Rule):
                     if cell.v is not None:
                         try:
                             val = float(cell.v)
-                            if 30000 <= val <= 80000 and not _is_date_num_fmt(cell.num_fmt):
+                            if 30000 <= val <= 80000 and not _is_date_num_fmt(
+                                cell.num_fmt
+                            ):
                                 findings.append(
                                     Finding(
                                         rule_id=self.id,
@@ -83,7 +85,6 @@ class RuleR11(Rule):
                 num_fmt_code="dd/mm/yyyy",
             )
         ]
-
 
 
 class RuleR17(Rule):
@@ -250,4 +251,3 @@ registry.register(RuleR11())
 registry.register(RuleR17())
 registry.register(RuleR18())
 registry.register(RuleR19())
-

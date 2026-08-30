@@ -54,13 +54,88 @@ def _parse_date_from_text(text: str) -> int | None:
     return None
 
 
+def _parse_boolean_from_text(text: str) -> bool | None:
+    s = _clean(text)
+    if s.upper() == "TRUE":
+        return True
+    if s.upper() == "FALSE":
+        return False
+    return None
+
+
+def _parse_percentage_from_text(text: str) -> tuple[float, str] | None:
+    s = _clean(text)
+    if not s:
+        return None
+    match = re.match(r"^([+-]?\s*[\d\s.,]+|\([+-]?\s*[\d\s.,]+\))\s*%$", s)
+    if not match:
+        return None
+
+    num_part = match.group(1).strip()
+    sign = 1
+    if num_part.startswith("-"):
+        sign = -1
+        num_part = num_part[1:].strip()
+    elif num_part.startswith("+"):
+        num_part = num_part[1:].strip()
+    elif num_part.startswith("(") and num_part.endswith(")"):
+        sign = -1
+        num_part = num_part[1:-1].strip()
+
+    s_nospace = num_part.replace(" ", "")
+    if not s_nospace or not any(c.isdigit() for c in s_nospace):
+        return None
+
+    has_comma = "," in s_nospace
+    has_dot = "." in s_nospace
+
+    dec_places = 0
+    if has_comma and has_dot:
+        last_comma = s_nospace.rfind(",")
+        last_dot = s_nospace.rfind(".")
+        if last_dot > last_comma:
+            clean_s = s_nospace.replace(",", "")
+            dec_places = len(s_nospace) - 1 - last_dot
+        else:
+            clean_s = s_nospace.replace(".", "").replace(",", ".")
+            dec_places = len(s_nospace) - 1 - last_comma
+    elif has_comma:
+        if s_nospace.count(",") > 1:
+            clean_s = s_nospace.replace(",", "")
+            dec_places = 0
+        else:
+            parts = s_nospace.split(",")
+            if len(parts[1]) == 3 and len(parts[0]) in (1, 2, 3):
+                clean_s = s_nospace.replace(",", "")
+                dec_places = 0
+            else:
+                clean_s = s_nospace.replace(",", ".")
+                dec_places = len(parts[1])
+    elif has_dot:
+        if s_nospace.count(".") > 1:
+            clean_s = s_nospace.replace(".", "")
+            dec_places = 0
+        else:
+            clean_s = s_nospace
+            dec_places = len(s_nospace.split(".")[1])
+    else:
+        clean_s = s_nospace
+        dec_places = 0
+
+    try:
+        val = float(clean_s) * sign / 100.0
+        fmt = "0%" if dec_places == 0 else f"0.{'0' * dec_places}%"
+        return (round(val, dec_places + 4), fmt)
+    except ValueError:
+        return None
+
+
 def _parse_number_from_text(text: str) -> int | float | None:
     if _parse_date_from_text(text) is not None:
         return None
     s = text.strip()
     if not s:
         return None
-
 
     sign = 1
     if s.startswith("-"):
@@ -245,6 +320,81 @@ class RuleR10(Rule):
         ]
 
 
+class RuleR12(Rule):
+    id = "R12"
+    title = "Giá trị Boolean hoặc phần trăm lưu dưới dạng văn bản"
+    why = "Excel không nhận diện được giá trị logic (TRUE/FALSE) hoặc tỷ lệ phần trăm (%), dẫn đến các phép tính và hàm điều kiện (như IF, SUM) bị sai lệch hoặc bỏ qua."
+    severity = "warning"
+    risk = "value"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.f:
+                continue
+            text = None
+            if cell.t == "s":
+                text = wb.resolve_shared_string(cell)
+            elif cell.t in ("inlineStr", "str"):
+                text = cell.v
+            if text is not None and (
+                _parse_boolean_from_text(text) is not None
+                or _parse_percentage_from_text(text) is not None
+            ):
+                findings.append(
+                    Finding(
+                        rule_id=self.id,
+                        sheet=sheet_name,
+                        ref=ref,
+                        description=f"Boolean or percentage '{text}' is stored as text",
+                        severity=self.severity,
+                        risk=self.risk,
+                    )
+                )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        cell = wb.sheets[finding.sheet].cells[finding.ref]
+        text = None
+        if cell.t == "s":
+            text = wb.resolve_shared_string(cell)
+        elif cell.t in ("inlineStr", "str"):
+            text = cell.v
+        assert text is not None, "fix() requires finding produced by detect()"
+        b_val = _parse_boolean_from_text(text)
+        if b_val is not None:
+            return [
+                CellEdit(
+                    op="SetValue",
+                    sheet=finding.sheet,
+                    ref=finding.ref,
+                    value=1 if b_val else 0,
+                    cell_type="b",
+                )
+            ]
+        pct = _parse_percentage_from_text(text)
+        assert pct is not None, (
+            f"Text '{text}' could not be parsed as boolean or percentage"
+        )
+        val, fmt = pct
+        return [
+            CellEdit(
+                op="SetValue",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                value=val,
+                cell_type=None,
+            ),
+            CellEdit(
+                op="SetNumFmt",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                num_fmt_code=fmt,
+            ),
+        ]
+
+
 class RuleR14(Rule):
     id = "R14"
     title = "Stray whitespace and invisible characters"
@@ -287,5 +437,5 @@ class RuleR14(Rule):
 
 registry.register(RuleR09())
 registry.register(RuleR10())
+registry.register(RuleR12())
 registry.register(RuleR14())
-

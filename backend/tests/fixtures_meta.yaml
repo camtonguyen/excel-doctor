@@ -31,5 +31,9 @@ fixtures:
     description: "File with dates rendered as serial numbers for R11"
     inventory:
       requires_tier_a: false
+  r12_bool_percent_text.xlsx:
+    description: "File with boolean or percentage stored as text for R12"
+    inventory:
+      requires_tier_a: false
 
 

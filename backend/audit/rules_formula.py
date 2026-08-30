@@ -34,6 +34,7 @@ def _normalize_to_relative(formula: str, base_row: int) -> str:
     for t in tokens:
         if t.type == TokenType.OPERAND:
             val = t.value
+
             def repl(m):
                 col_part = m.group(1)
                 abs_row = m.group(2)
@@ -42,7 +43,7 @@ def _normalize_to_relative(formula: str, base_row: int) -> str:
                     return m.group(0)
                 offset = row_num - base_row
                 return f"{col_part}[{offset:+d}]" if offset != 0 else f"{col_part}[0]"
-            
+
             val = re.sub(r"(?<![A-Za-z])([\$]?[A-Za-z]+)([\$]?)(\d+)\b", repl, val)
             out.append(val)
         else:
@@ -447,36 +448,42 @@ class RuleR08(Rule):
                     for r in rows
                     if (f := cells[r].f) is not None
                 }
-                
+
                 for r in rows:
-                    if r - 1 in patterns and r + 1 in patterns and patterns[r - 1] == patterns[r + 1] and patterns[r] != patterns[r - 1]:
-                            findings.append(
-                                Finding(
-                                    rule_id=self.id,
-                                    sheet=sheet_name,
-                                    ref=f"{col}{r}",
-                                    description="Formula is an outlier in its column.",
-                                    severity=self.severity,
-                                    risk=self.risk,
-                                )
+                    if (
+                        r - 1 in patterns
+                        and r + 1 in patterns
+                        and patterns[r - 1] == patterns[r + 1]
+                        and patterns[r] != patterns[r - 1]
+                    ):
+                        findings.append(
+                            Finding(
+                                rule_id=self.id,
+                                sheet=sheet_name,
+                                ref=f"{col}{r}",
+                                description="Formula is an outlier in its column.",
+                                severity=self.severity,
+                                risk=self.risk,
                             )
+                        )
         return findings
 
     def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
         sheet = wb.sheets[finding.sheet]
         c, r = _split_ref(finding.ref)
-        
+
         cell_above = sheet.cells.get(f"{c}{r - 1}")
         if not cell_above or not cell_above.f:
             return []
-            
+
         f_above = cell_above.f
-        
+
         tokens = tokenize(f_above)
         out = []
         for t in tokens:
             if t.type == TokenType.OPERAND:
                 val = t.value
+
                 def repl(m):
                     col_part = m.group(1)
                     abs_row = m.group(2)
@@ -485,12 +492,13 @@ class RuleR08(Rule):
                         return m.group(0)
                     new_row = max(1, row_num + 1)
                     return f"{col_part}{abs_row}{new_row}"
+
                 val = re.sub(r"(?<![A-Za-z])([\$]?[A-Za-z]+)([\$]?)(\d+)\b", repl, val)
                 out.append(val)
             else:
                 out.append(t.value)
         new_f = "".join(out)
-        
+
         return [
             CellEdit(
                 op="SetFormula", sheet=finding.sheet, ref=finding.ref, formula=new_f

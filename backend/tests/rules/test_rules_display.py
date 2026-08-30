@@ -12,7 +12,6 @@ R11_FIXTURE_PATH = (
 )
 
 
-
 def test_r17_locale_ambiguous_date_formats():
     rule = RuleR17()
 
@@ -153,9 +152,10 @@ def test_r11_date_rendered_as_serial_detection_and_fix():
 
 
 def test_r11_apply_fix_and_redetect():
-    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_in, tempfile.NamedTemporaryFile(
-        suffix=".xlsx", delete=False
-    ) as tmp_out:
+    with (
+        tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_in,
+        tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_out,
+    ):
         tmp_in_path = Path(tmp_in.name)
         tmp_out_path = Path(tmp_out.name)
     try:
@@ -179,4 +179,3 @@ def test_r11_apply_fix_and_redetect():
             tmp_in_path.unlink()
         if tmp_out_path.exists():
             tmp_out_path.unlink()
-

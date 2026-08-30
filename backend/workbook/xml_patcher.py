@@ -202,7 +202,6 @@ def apply_edits(
                     continue
 
                 if item.filename == "xl/calcChain.xml" and calc_chain_dropped:
-
                     continue
 
                 if item.filename in deleted_targets:
@@ -342,7 +341,6 @@ def apply_edits(
                         item, styles_xml_bytes, compress_type=item.compress_type
                     )
                     continue
-
 
                 if (
                     calc_chain_dropped or deleted_targets
