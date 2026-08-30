@@ -1,3 +1,4 @@
+import datetime
 import re
 import unicodedata
 
@@ -18,10 +19,48 @@ def _clean(text: str) -> str:
     return text.strip()
 
 
+def _parse_date_from_text(text: str) -> int | None:
+    s = _clean(text)
+    if not s:
+        return None
+
+    match = re.match(r"^(\d{1,2})([/.-])(\d{1,2})\2(\d{2}|\d{4})$", s)
+    if not match:
+        return None
+
+    d_str, _sep, m_str, y_str = match.groups()
+    day = int(d_str)
+    month = int(m_str)
+    year = int(y_str)
+
+    if len(y_str) == 2:
+        if year < 50:
+            year += 2000
+        else:
+            year += 1900
+
+    if not (1900 <= year <= 2100):
+        return None
+
+    try:
+        dt = datetime.date(year, month, day)
+    except ValueError:
+        return None
+
+    if dt >= datetime.date(1900, 3, 1):
+        return (dt - datetime.date(1899, 12, 30)).days
+    elif dt >= datetime.date(1900, 1, 1):
+        return (dt - datetime.date(1899, 12, 31)).days + 1
+    return None
+
+
 def _parse_number_from_text(text: str) -> int | float | None:
+    if _parse_date_from_text(text) is not None:
+        return None
     s = text.strip()
     if not s:
         return None
+
 
     sign = 1
     if s.startswith("-"):
@@ -146,6 +185,66 @@ class RuleR09(Rule):
         ]
 
 
+class RuleR10(Rule):
+    id = "R10"
+    title = "Ngày tháng lưu dưới dạng văn bản"
+    why = "Excel không nhận diện được ngày tháng nên không thể lọc, sắp xếp theo thời gian hoặc tính số ngày."
+    severity = "warning"
+    risk = "value"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.f:
+                continue
+            text = None
+            if cell.t == "s":
+                text = wb.resolve_shared_string(cell)
+            elif cell.t in ("inlineStr", "str"):
+                text = cell.v
+            if text is not None:
+                parsed = _parse_date_from_text(text)
+                if parsed is not None:
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            sheet=sheet_name,
+                            ref=ref,
+                            description=f"Date '{text}' is stored as text",
+                            severity=self.severity,
+                            risk=self.risk,
+                        )
+                    )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        cell = wb.sheets[finding.sheet].cells[finding.ref]
+        text = None
+        if cell.t == "s":
+            text = wb.resolve_shared_string(cell)
+        elif cell.t in ("inlineStr", "str"):
+            text = cell.v
+        assert text is not None, "fix() requires finding produced by detect()"
+        parsed = _parse_date_from_text(text)
+        assert parsed is not None, f"Text '{text}' could not be parsed as date"
+        return [
+            CellEdit(
+                op="SetValue",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                value=parsed,
+                cell_type=None,
+            ),
+            CellEdit(
+                op="SetNumFmt",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                num_fmt_code="dd/mm/yyyy",
+            ),
+        ]
+
+
 class RuleR14(Rule):
     id = "R14"
     title = "Stray whitespace and invisible characters"
@@ -187,4 +286,6 @@ class RuleR14(Rule):
 
 
 registry.register(RuleR09())
+registry.register(RuleR10())
 registry.register(RuleR14())
+
