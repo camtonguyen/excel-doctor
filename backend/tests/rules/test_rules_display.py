@@ -1,6 +1,16 @@
-from backend.audit.rules_display import RuleR17, RuleR18, RuleR19
+import shutil
+import tempfile
+from pathlib import Path
+
+from backend.audit.rules_display import RuleR11, RuleR17, RuleR18, RuleR19
 from backend.model import CellModel, SheetModel, WorkbookInventory
-from backend.workbook.reader import WorkbookModel
+from backend.workbook.reader import WorkbookModel, read_workbook
+from backend.workbook.xml_patcher import apply_edits
+
+R11_FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent.parent / "fixtures" / "r11_date_serial.xlsx"
+)
+
 
 
 def test_r17_locale_ambiguous_date_formats():
@@ -119,3 +129,54 @@ def test_r19_inconsistent_fonts():
     assert edits[0].op == "SetFont"
     assert edits[0].font_name == "Arial"
     assert edits[0].font_size == "11"
+
+
+def test_r11_date_rendered_as_serial_detection_and_fix():
+    wb = read_workbook(R11_FIXTURE_PATH)
+    r11 = RuleR11()
+
+    findings = r11.detect(wb)
+    refs = {f.ref for f in findings}
+    assert refs == {"B2", "B3", "C2", "C3"}
+    assert all(f.rule_id == "R11" for f in findings)
+    assert all(f.risk == "display" for f in findings)
+    assert all(f.severity == "warning" for f in findings)
+
+    findings_map = {f.ref: f for f in findings}
+    for ref in ["B2", "B3", "C2", "C3"]:
+        edits = r11.fix(wb, findings_map[ref])
+        assert len(edits) == 1
+        assert edits[0].op == "SetNumFmt"
+        assert edits[0].sheet == "Sheet1"
+        assert edits[0].ref == ref
+        assert edits[0].num_fmt_code == "dd/mm/yyyy"
+
+
+def test_r11_apply_fix_and_redetect():
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_in, tempfile.NamedTemporaryFile(
+        suffix=".xlsx", delete=False
+    ) as tmp_out:
+        tmp_in_path = Path(tmp_in.name)
+        tmp_out_path = Path(tmp_out.name)
+    try:
+        shutil.copy(R11_FIXTURE_PATH, tmp_in_path)
+        wb = read_workbook(tmp_in_path)
+        r11 = RuleR11()
+        findings = r11.detect(wb)
+        assert len(findings) == 4
+
+        all_edits = []
+        for f in findings:
+            all_edits.extend(r11.fix(wb, f))
+
+        apply_edits(tmp_in_path, tmp_out_path, all_edits)
+
+        wb_fixed = read_workbook(tmp_out_path)
+        findings_after = r11.detect(wb_fixed)
+        assert len(findings_after) == 0
+    finally:
+        if tmp_in_path.exists():
+            tmp_in_path.unlink()
+        if tmp_out_path.exists():
+            tmp_out_path.unlink()
+

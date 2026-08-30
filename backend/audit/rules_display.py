@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from collections import Counter
 
 from backend.audit.base import Rule, registry
@@ -7,6 +8,82 @@ from backend.workbook.reader import WorkbookModel
 
 # Matches optional [$-xxx] prefix, followed by either mm-dd or m/d/yy
 _AMBIGUOUS_DATE_RE = re.compile(r"^(?:\[\$[^\]]+\])?(mm-dd|m/d/yy)", re.IGNORECASE)
+
+
+def _split_ref(ref: str) -> tuple[str, int]:
+    match = re.match(r"^([A-Za-z]+)(\d+)$", ref)
+    if match:
+        return match.group(1).upper(), int(match.group(2))
+    return "", 0
+
+
+def _is_date_num_fmt(num_fmt: str | None) -> bool:
+    if not num_fmt:
+        return False
+    if num_fmt.strip().lower() == "general":
+        return False
+    cleaned = re.sub(r"\[[^\]]*\]", "", num_fmt)
+    cleaned = re.sub(r'"[^"]*"', "", cleaned)
+    cleaned = re.sub(r"\\.", "", cleaned)
+    return bool(re.search(r"(?i)(d{1,4}|y{2,4}|m{1,5})", cleaned))
+
+
+class RuleR11(Rule):
+    id = "R11"
+    title = "Ngày hiển thị dưới dạng số serial"
+    why = "Cột ngày tháng đang hiển thị số nguyên (như 45306) thay vì định dạng ngày, gây khó đọc và nhầm lẫn."
+    severity = "warning"
+    risk = "display"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            date_cols = set()
+            for ref, cell in sheet.cells.items():
+                col, row = _split_ref(ref)
+                if 1 <= row <= 5:
+                    text = wb.resolve_shared_string(cell) or cell.v or ""
+                    text_norm = unicodedata.normalize("NFC", text).lower()
+                    if re.search(r"(ngày|ngay|date)", text_norm):
+                        date_cols.add(col)
+
+            if not date_cols:
+                continue
+
+            for ref, cell in sheet.cells.items():
+                col, row = _split_ref(ref)
+                if col in date_cols and row > 1:
+                    if cell.t in ("s", "inlineStr", "str", "b", "e"):
+                        continue
+                    if cell.v is not None:
+                        try:
+                            val = float(cell.v)
+                            if 30000 <= val <= 80000 and not _is_date_num_fmt(cell.num_fmt):
+                                findings.append(
+                                    Finding(
+                                        rule_id=self.id,
+                                        sheet=sheet_name,
+                                        ref=ref,
+                                        description=f"Date serial number {cell.v} rendered without date format",
+                                        severity=self.severity,
+                                        risk=self.risk,
+                                    )
+                                )
+                        except ValueError:
+                            continue
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        return [
+            CellEdit(
+                op="SetNumFmt",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                num_fmt_code="dd/mm/yyyy",
+            )
+        ]
+
 
 
 class RuleR17(Rule):
@@ -169,6 +246,8 @@ class RuleR19(Rule):
         ]
 
 
+registry.register(RuleR11())
 registry.register(RuleR17())
 registry.register(RuleR18())
 registry.register(RuleR19())
+
