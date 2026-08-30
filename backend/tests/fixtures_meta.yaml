@@ -27,4 +27,9 @@ fixtures:
     description: "File with dates stored as text for R10"
     inventory:
       requires_tier_a: false
+  r11_date_serial.xlsx:
+    description: "File with dates rendered as serial numbers for R11"
+    inventory:
+      requires_tier_a: false
+
 

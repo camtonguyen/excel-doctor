@@ -149,8 +149,11 @@ def apply_edits(
         )
         original_s: dict[tuple[str, str], int] = {}
         new_s_map: dict[tuple[str, str], int] = {}
+        styles_xml_bytes: bytes | None = None
 
         if has_style_edits:
+            from backend.workbook.styles import ensure_font_xf
+
             for sheet_name, sheet_edits in cell_edits_by_sheet.items():
                 style_refs = {
                     e.ref for e in sheet_edits if e.op in ("SetNumFmt", "SetFont")
@@ -168,6 +171,27 @@ def apply_edits(
                     if ref in style_refs:
                         original_s[(sheet_name, ref)] = int(c_node.get("s", "0"))
 
+            if "xl/styles.xml" in zin.namelist():
+                with zin.open("xl/styles.xml") as f:
+                    tree = etree.parse(f)
+                root = tree.getroot()
+                ns = _ns(root, SPREADSHEET_NS)
+                for sheet_name, sheet_edits in cell_edits_by_sheet.items():
+                    for edit in sheet_edits:
+                        if edit.op == "SetNumFmt" and edit.num_fmt_code:
+                            old_s = original_s.get((sheet_name, edit.ref), 0)
+                            new_s = ensure_xf(root, ns, old_s, edit.num_fmt_code)
+                            new_s_map[(sheet_name, edit.ref)] = new_s
+                        elif edit.op == "SetFont":
+                            old_s = original_s.get((sheet_name, edit.ref), 0)
+                            new_s = ensure_font_xf(
+                                root, ns, old_s, edit.font_name, edit.font_size
+                            )
+                            new_s_map[(sheet_name, edit.ref)] = new_s
+                styles_xml_bytes = etree.tostring(
+                    tree, xml_declaration=True, encoding="UTF-8", standalone=True
+                )
+
         # ponytail: zip format doesn't record deflate level as metadata, so only
         # compress_type (STORED/DEFLATED) is recoverable per entry; level itself
         # can't be "preserved" from the source, only chosen consistently here.
@@ -178,6 +202,7 @@ def apply_edits(
                     continue
 
                 if item.filename == "xl/calcChain.xml" and calc_chain_dropped:
+
                     continue
 
                 if item.filename in deleted_targets:
@@ -312,34 +337,12 @@ def apply_edits(
                     _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_workbook)
                     continue
 
-                if item.filename == "xl/styles.xml" and has_style_edits:
-
-                    def mutate_styles(
-                        root,
-                        ns,
-                        original_s=original_s,
-                        cell_edits_by_sheet=cell_edits_by_sheet,
-                        new_s_map=new_s_map,
-                    ):
-                        from backend.workbook.styles import ensure_font_xf
-
-                        for sheet_name, sheet_edits in cell_edits_by_sheet.items():
-                            for edit in sheet_edits:
-                                if edit.op == "SetNumFmt" and edit.num_fmt_code:
-                                    old_s = original_s.get((sheet_name, edit.ref), 0)
-                                    new_s = ensure_xf(
-                                        root, ns, old_s, edit.num_fmt_code
-                                    )
-                                    new_s_map[(sheet_name, edit.ref)] = new_s
-                                elif edit.op == "SetFont":
-                                    old_s = original_s.get((sheet_name, edit.ref), 0)
-                                    new_s = ensure_font_xf(
-                                        root, ns, old_s, edit.font_name, edit.font_size
-                                    )
-                                    new_s_map[(sheet_name, edit.ref)] = new_s
-
-                    _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_styles)
+                if item.filename == "xl/styles.xml" and styles_xml_bytes is not None:
+                    zout.writestr(
+                        item, styles_xml_bytes, compress_type=item.compress_type
+                    )
                     continue
+
 
                 if (
                     calc_chain_dropped or deleted_targets
