@@ -2,7 +2,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from backend.audit.rules_datatype import RuleR09, RuleR10, RuleR12, RuleR14
+from backend.audit.rules_datatype import RuleR09, RuleR10, RuleR12, RuleR13, RuleR14
 from backend.workbook.reader import read_workbook
 from backend.workbook.xml_patcher import apply_edits
 
@@ -20,6 +20,12 @@ R12_FIXTURE_PATH = (
     / "fixtures"
     / "r12_bool_percent_text.xlsx"
 )
+R13_FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "fixtures"
+    / "r13_percent_wrong_scale.xlsx"
+)
+
 
 
 def test_r14_detects_every_whitespace_defect_and_skips_clean_text():
@@ -281,3 +287,21 @@ def test_r12_apply_fix_and_redetect():
             tmp_in_path.unlink()
         if tmp_out_path.exists():
             tmp_out_path.unlink()
+
+
+def test_r13_detects_percentage_stored_at_wrong_scale():
+    wb = read_workbook(R13_FIXTURE_PATH)
+    r13 = RuleR13()
+
+    findings = r13.detect(wb)
+    refs = {f.ref for f in findings}
+    assert refs == {"B8", "B9", "C10", "C11", "B12", "C13"}
+    assert len(findings) == 6
+    assert all(f.rule_id == "R13" for f in findings)
+    assert all(f.risk == "value" for f in findings)
+    assert all(f.severity == "warning" for f in findings)
+    assert r13.auto_fixable is False
+
+    # Test fix returns empty list or raises (report only)
+    assert r13.fix(wb, findings[0]) == []
+

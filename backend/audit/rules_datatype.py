@@ -130,7 +130,19 @@ def _parse_percentage_from_text(text: str) -> tuple[float, str] | None:
         return None
 
 
+def _is_percentage_num_fmt(num_fmt: str | None) -> bool:
+    if not num_fmt:
+        return False
+    if num_fmt.strip().lower() == "general":
+        return False
+    cleaned = re.sub(r"\[[^\]]*\]", "", num_fmt)
+    cleaned = re.sub(r'"[^"]*"', "", cleaned)
+    cleaned = re.sub(r"\\.", "", cleaned)
+    return "%" in cleaned
+
+
 def _parse_number_from_text(text: str) -> int | float | None:
+
     if _parse_date_from_text(text) is not None:
         return None
     s = text.strip()
@@ -395,6 +407,47 @@ class RuleR12(Rule):
         ]
 
 
+class RuleR13(Rule):
+    id = "R13"
+    title = "Giá trị phần trăm lưu sai tỷ lệ"
+    why = (
+        "Ô được định dạng phần trăm (%) nhưng lưu giá trị số nguyên lớn hơn 1 "
+        "(ví dụ nhập 10 thay vì 0.1, khiến Excel hiểu thành 1000%), gây sai lệch lớn khi tính toán."
+    )
+    severity = "warning"
+    risk = "value"
+    auto_fixable = False
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, ref, cell in wb.iter_cells():
+            if cell.t in ("s", "inlineStr", "str", "b", "e"):
+                continue
+            if not cell.v:
+                continue
+            if not _is_percentage_num_fmt(cell.num_fmt):
+                continue
+            try:
+                val = float(cell.v)
+                if val > 1 and val.is_integer():
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            sheet=sheet_name,
+                            ref=ref,
+                            description=f"Percentage value {cell.v} is an integer > 1 formatted as %",
+                            severity=self.severity,
+                            risk=self.risk,
+                        )
+                    )
+            except ValueError:
+                continue
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        return []
+
+
 class RuleR14(Rule):
     id = "R14"
     title = "Stray whitespace and invisible characters"
@@ -438,4 +491,6 @@ class RuleR14(Rule):
 registry.register(RuleR09())
 registry.register(RuleR10())
 registry.register(RuleR12())
+registry.register(RuleR13())
 registry.register(RuleR14())
+
