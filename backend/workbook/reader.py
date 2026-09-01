@@ -119,14 +119,17 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         cell_xfs_num_fmt_ids.append(int(xf.get("numFmtId", "0")))
                         cell_xfs_font_ids.append(int(xf.get("fontId", "0")))
 
-        # Define basic built-in date formats (to cover common R17 ambiguous dates)
+        # Define basic built-in formats (dates, percentages, etc.)
         BUILTIN_FMTS = {
+            9: "0%",
+            10: "0.00%",
             14: "m/d/yyyy",
             15: "d-mmm-yy",
             16: "d-mmm",
             17: "mmm-yy",
             22: "m/d/yyyy h:mm",
         }
+
 
         # 4. Parse cells from each worksheet
         for sheet_model in wb.sheets.values():

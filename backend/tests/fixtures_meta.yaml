@@ -35,5 +35,10 @@ fixtures:
     description: "File with boolean or percentage stored as text for R12"
     inventory:
       requires_tier_a: false
+  r13_percent_wrong_scale.xlsx:
+    description: "File with percentage stored at wrong scale for R13"
+    inventory:
+      requires_tier_a: false
+
 
 
