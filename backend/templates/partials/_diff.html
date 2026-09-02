@@ -1,0 +1,61 @@
+<div class="diff-container">
+    <div class="report-header">
+        <h2>Bảng đối chiếu thay đổi (Diff Table)</h2>
+        {% if ok %}
+            <p>Đã sửa và kiểm tra thành công <strong>{{ total_changes }}</strong> thay đổi. Vui lòng kiểm tra đối chiếu trước khi xác nhận tải về.</p>
+        {% else %}
+            <div class="alert error" style="background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                <strong>Lỗi kiểm tra tính toàn vẹn:</strong> {{ error }}
+                <p>Không thể xuất file do không vượt qua chuỗi kiểm định an toàn.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if ok %}
+        {% if diffs %}
+            <div class="diff-table-wrapper" style="overflow-x: auto; margin-top: 1rem;">
+                <table class="table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f3f4f6; text-align: left;">
+                            <th style="padding: 8px;">Sheet</th>
+                            <th style="padding: 8px;">Ô</th>
+                            <th style="padding: 8px;">Trước</th>
+                            <th style="padding: 8px;">Sau</th>
+                            <th style="padding: 8px;">Quy tắc</th>
+                            <th style="padding: 8px;">Mô tả</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in diffs %}
+                            <tr style="border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 8px;">{{ d.sheet }}</td>
+                                <td style="padding: 8px;"><strong>{{ d.ref }}</strong></td>
+                                <td style="padding: 8px; color: #dc2626;"><code>{{ d.before }}</code></td>
+                                <td style="padding: 8px; color: #16a34a;"><code>{{ d.after }}</code></td>
+                                <td style="padding: 8px;"><span class="badge">{{ d.cause }}</span></td>
+                                <td style="padding: 8px; color: #4b5563;">{{ d.note }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p style="color: #4b5563; margin-top: 1rem;">Không có giá trị ô nào bị thay đổi.</p>
+        {% endif %}
+
+        <div class="actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+            <button hx-post="/fix/{{ job }}/confirm" hx-target="#app" class="btn primary">
+                Xác nhận tải về
+            </button>
+            <button hx-get="/scan/{{ job }}" hx-target="#app" class="btn secondary">
+                Quay lại báo cáo
+            </button>
+        </div>
+    {% else %}
+        <div class="actions" style="margin-top: 2rem;">
+            <button hx-get="/scan/{{ job }}" hx-target="#app" class="btn secondary">
+                Quay lại báo cáo
+            </button>
+        </div>
+    {% endif %}
+</div>

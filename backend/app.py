@@ -1,15 +1,19 @@
 import csv
 import io
+import shutil
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Request, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from backend.audit.base import registry
+from backend.model import Edit
 from backend.store import store
+from backend.verify.verifier import verify_patch
 from backend.workbook.reader import read_workbook
+from backend.workbook.xml_patcher import apply_edits
 
 app = FastAPI()
 app.mount(
@@ -55,9 +59,12 @@ async def start_scan(
     if not job:
         return HTMLResponse("Job not found", status_code=404)
 
-    file_path = job["dir"] / file.filename
+    file_path = job["dir"] / (file.filename or "uploaded.xlsx")
     with open(file_path, "wb") as buffer:  # noqa: ASYNC230
         buffer.write(await file.read())
+
+    job["original_file"] = file_path
+    job["filename"] = file.filename or "uploaded.xlsx"
 
     background_tasks.add_task(background_scan, job_id, str(file_path))
 
@@ -162,4 +169,102 @@ async def download_csv(job_id: str):
         output,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=Bao_Cao_Kiem_Tra.csv"},
+    )
+
+
+@app.post("/fix/{job_id}", response_class=HTMLResponse)
+async def preview_fix(request: Request, job_id: str):
+    job = store.get_job(job_id)
+    if not job:
+        return HTMLResponse("Job not found", status_code=404)
+
+    form = await request.form()
+    selected_rules = set(form.getlist("fix"))
+
+    original_file = job.get("original_file")
+    if not original_file or not Path(original_file).exists():
+        return HTMLResponse("Original file not found", status_code=404)
+
+    wb = read_workbook(original_file)
+    findings = job.get("findings", [])
+
+    edits: list[Edit] = []
+    rules_map = {r.id: r for r in registry.get_all()}
+
+    selected_findings = [f for f in findings if f.rule_id in selected_rules]
+    for f in selected_findings:
+        rule = rules_map.get(f.rule_id)
+        if rule and rule.auto_fixable:
+            edits.extend(rule.fix(wb, f))
+
+    patched_file = job["dir"] / "patched.xlsx"
+    apply_edits(original_file, patched_file, edits)
+
+    ok, diff_entries, error_msg = verify_patch(
+        original_file, patched_file, edits, selected_findings
+    )
+
+    job["edits"] = edits
+    job["diffs"] = diff_entries
+    job["patched_file"] = patched_file
+    job["verification_ok"] = ok
+    job["verification_error"] = error_msg
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/_diff.html",
+        context={
+            "job": job_id,
+            "ok": ok,
+            "error": error_msg,
+            "diffs": diff_entries,
+            "total_changes": len(diff_entries),
+        },
+    )
+
+
+@app.post("/fix/{job_id}/confirm", response_class=HTMLResponse)
+async def confirm_fix(request: Request, job_id: str):
+    job = store.get_job(job_id)
+    if not job:
+        return HTMLResponse("Job not found", status_code=404)
+
+    if not job.get("verification_ok"):
+        return HTMLResponse("Verification failed", status_code=400)
+
+    patched_file = job.get("patched_file")
+    if not patched_file or not Path(patched_file).exists():
+        return HTMLResponse("Patched file not found", status_code=404)
+
+    fixed_filename = f"repaired_{job.get('filename', 'workbook.xlsx')}"
+    fixed_file = job["dir"] / fixed_filename
+    shutil.copy(patched_file, fixed_file)
+    job["fixed_file"] = fixed_file
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/_ready.html",
+        context={
+            "job": job_id,
+            "filename": fixed_filename,
+            "total_changes": len(job.get("diffs", [])),
+        },
+    )
+
+
+@app.get("/download/{job_id}")
+async def download_file(job_id: str):
+    job = store.get_job(job_id)
+    if not job:
+        return HTMLResponse("Job not found", status_code=404)
+
+    fixed_file = job.get("fixed_file") or job.get("patched_file")
+    if not fixed_file or not Path(fixed_file).exists():
+        return HTMLResponse("Fixed file not found", status_code=404)
+
+    filename = Path(fixed_file).name
+    return FileResponse(
+        path=str(fixed_file),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=filename,
     )
