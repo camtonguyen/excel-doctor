@@ -39,6 +39,7 @@ fixtures:
     description: "File with percentage stored at wrong scale for R13"
     inventory:
       requires_tier_a: false
-
-
-
+  r16_inconsistent_numfmt.xlsx:
+    description: "File with inconsistent number format in column for R16"
+    inventory:
+      requires_tier_a: false
