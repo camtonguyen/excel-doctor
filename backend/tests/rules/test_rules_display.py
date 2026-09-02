@@ -2,13 +2,16 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from backend.audit.rules_display import RuleR11, RuleR17, RuleR18, RuleR19
+from backend.audit.rules_display import RuleR11, RuleR16, RuleR17, RuleR18, RuleR19
 from backend.model import CellModel, SheetModel, WorkbookInventory
 from backend.workbook.reader import WorkbookModel, read_workbook
 from backend.workbook.xml_patcher import apply_edits
 
 R11_FIXTURE_PATH = (
     Path(__file__).parent.parent.parent.parent / "fixtures" / "r11_date_serial.xlsx"
+)
+R16_FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent.parent / "fixtures" / "r16_inconsistent_numfmt.xlsx"
 )
 
 
@@ -173,6 +176,100 @@ def test_r11_apply_fix_and_redetect():
 
         wb_fixed = read_workbook(tmp_out_path)
         findings_after = r11.detect(wb_fixed)
+        assert len(findings_after) == 0
+    finally:
+        if tmp_in_path.exists():
+            tmp_in_path.unlink()
+        if tmp_out_path.exists():
+            tmp_out_path.unlink()
+
+
+def test_r16_detects_inconsistent_number_format_within_column():
+    wb = read_workbook(R16_FIXTURE_PATH)
+    r16 = RuleR16()
+
+    findings = r16.detect(wb)
+    refs = {f.ref for f in findings}
+    assert refs == {"B15", "B31", "C20", "C35"}
+    assert len(findings) == 4
+    assert all(f.rule_id == "R16" for f in findings)
+    assert all(f.risk == "display" for f in findings)
+    assert all(f.severity == "style" for f in findings)
+    assert r16.auto_fixable is True
+
+    findings_map = {f.ref: f for f in findings}
+
+    edits_b15 = r16.fix(wb, findings_map["B15"])
+    assert len(edits_b15) == 1
+    assert edits_b15[0].op == "SetNumFmt"
+    assert edits_b15[0].sheet == "Sheet1"
+    assert edits_b15[0].ref == "B15"
+    assert edits_b15[0].num_fmt_code == "#,##0"
+
+    edits_c20 = r16.fix(wb, findings_map["C20"])
+    assert len(edits_c20) == 1
+    assert edits_c20[0].op == "SetNumFmt"
+    assert edits_c20[0].sheet == "Sheet1"
+    assert edits_c20[0].ref == "C20"
+    assert edits_c20[0].num_fmt_code == "0.00%"
+
+
+def test_r16_unit_cases_thresholds():
+    r16 = RuleR16()
+
+    # Case 1: Column with minority group of 4 cells (exceeds <= 3) should not be flagged
+    cells = {}
+    for r in range(9, 59):  # 50 cells
+        if r in (10, 11, 12, 13):  # 4 cells
+            cells[f"A{r}"] = CellModel(ref=f"A{r}", v=str(r), num_fmt="0.00")
+        else:
+            cells[f"A{r}"] = CellModel(ref=f"A{r}", v=str(r), num_fmt="#,##0")
+    wb = WorkbookModel(inventory=WorkbookInventory())
+    wb.sheets = {"Sheet1": SheetModel(name="Sheet1", target="worksheets/sheet1.xml", cells=cells)}
+    assert len(r16.detect(wb)) == 0
+
+    # Case 2: Column with rows <= 8 only should not be flagged
+    cells_head = {}
+    for r in range(1, 9):
+        cells_head[f"A{r}"] = CellModel(ref=f"A{r}", v=str(r), num_fmt="0.00" if r == 1 else "#,##0")
+    wb_head = WorkbookModel(inventory=WorkbookInventory())
+    wb_head.sheets = {"Sheet1": SheetModel(name="Sheet1", target="worksheets/sheet1.xml", cells=cells_head)}
+    assert len(r16.detect(wb_head)) == 0
+
+    # Case 3: Column where minority is not under 1/10 of majority (e.g., 2 minority cells out of 10 majority cells: 2 >= 10/10)
+    cells_small = {}
+    for r in range(9, 21):  # 12 cells: 10 of #,##0, 2 of 0.00
+        if r in (10, 11):
+            cells_small[f"A{r}"] = CellModel(ref=f"A{r}", v=str(r), num_fmt="0.00")
+        else:
+            cells_small[f"A{r}"] = CellModel(ref=f"A{r}", v=str(r), num_fmt="#,##0")
+    wb_small = WorkbookModel(inventory=WorkbookInventory())
+    wb_small.sheets = {"Sheet1": SheetModel(name="Sheet1", target="worksheets/sheet1.xml", cells=cells_small)}
+    assert len(r16.detect(wb_small)) == 0
+
+
+def test_r16_apply_fix_and_redetect():
+    with (
+        tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_in,
+        tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_out,
+    ):
+        tmp_in_path = Path(tmp_in.name)
+        tmp_out_path = Path(tmp_out.name)
+    try:
+        shutil.copy(R16_FIXTURE_PATH, tmp_in_path)
+        wb = read_workbook(tmp_in_path)
+        r16 = RuleR16()
+        findings = r16.detect(wb)
+        assert len(findings) == 4
+
+        all_edits = []
+        for f in findings:
+            all_edits.extend(r16.fix(wb, f))
+
+        apply_edits(tmp_in_path, tmp_out_path, all_edits)
+
+        wb_fixed = read_workbook(tmp_out_path)
+        findings_after = r16.detect(wb_fixed)
         assert len(findings_after) == 0
     finally:
         if tmp_in_path.exists():

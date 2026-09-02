@@ -119,15 +119,27 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         cell_xfs_num_fmt_ids.append(int(xf.get("numFmtId", "0")))
                         cell_xfs_font_ids.append(int(xf.get("fontId", "0")))
 
-        # Define basic built-in formats (dates, percentages, etc.)
+        # Define basic built-in formats (dates, percentages, numeric, etc.)
         BUILTIN_FMTS = {
+            1: "0",
+            2: "0.00",
+            3: "#,##0",
+            4: "#,##0.00",
             9: "0%",
             10: "0.00%",
+            11: "0.00E+00",
+            12: "# ?/?",
+            13: "# ??/??",
             14: "m/d/yyyy",
             15: "d-mmm-yy",
             16: "d-mmm",
             17: "mmm-yy",
             22: "m/d/yyyy h:mm",
+            37: "#,##0 ;(#,##0)",
+            38: "#,##0 ;[Red](#,##0)",
+            39: "#,##0.00;(#,##0.00)",
+            40: "#,##0.00;[Red](#,##0.00)",
+            49: "@",
         }
 
 

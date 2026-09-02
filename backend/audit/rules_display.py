@@ -247,7 +247,101 @@ class RuleR19(Rule):
         ]
 
 
+class RuleR16(Rule):
+    id = "R16"
+    title = "Định dạng số không đồng nhất trong cùng một cột"
+    why = (
+        "Trong cùng một cột, một vài ô có định dạng số khác biệt so với đa số các ô còn lại "
+        "(ví dụ có 2 ô định dạng 0.00 trong cột 50 dòng định dạng #,##0), gây mất tính nhất quán và khó đọc."
+    )
+    severity = "style"
+    risk = "display"
+    auto_fixable = True
+
+    def detect(self, wb: WorkbookModel) -> list[Finding]:
+        findings = []
+        for sheet_name, sheet in wb.sheets.items():
+            cols: dict[str, list[tuple[str, str]]] = {}
+            for ref, cell in sheet.cells.items():
+                col, row = _split_ref(ref)
+                if not col or row <= 8:
+                    continue
+                if cell.v is None and cell.f is None:
+                    continue
+                fmt = cell.num_fmt if cell.num_fmt is not None else "General"
+                cols.setdefault(col, []).append((ref, fmt))
+
+            for cell_list in cols.values():
+                if not cell_list:
+                    continue
+                fmt_counts = Counter(fmt for _, fmt in cell_list)
+                most_common = fmt_counts.most_common()
+                if not most_common:
+                    continue
+                majority_fmt, majority_count = most_common[0]
+                if len(most_common) > 1 and most_common[1][1] == majority_count:
+                    continue
+
+                threshold = majority_count / 10.0
+                minority_fmts = {
+                    fmt
+                    for fmt, count in fmt_counts.items()
+                    if fmt != majority_fmt and count <= 3 and count < threshold
+                }
+
+                if not minority_fmts:
+                    continue
+
+                for ref, fmt in cell_list:
+                    if fmt in minority_fmts:
+                        findings.append(
+                            Finding(
+                                rule_id=self.id,
+                                sheet=sheet_name,
+                                ref=ref,
+                                description=f"Minority number format '{fmt}' in column with majority format '{majority_fmt}'",
+                                severity=self.severity,
+                                risk=self.risk,
+                            )
+                        )
+        return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[CellEdit]:
+        sheet = wb.sheets.get(finding.sheet)
+        if not sheet:
+            return []
+        target_col, _ = _split_ref(finding.ref)
+        if not target_col:
+            return []
+
+        col_fmts = []
+        for ref, cell in sheet.cells.items():
+            col, row = _split_ref(ref)
+            if (
+                col == target_col
+                and row > 8
+                and (cell.v is not None or cell.f is not None)
+            ):
+                fmt = cell.num_fmt if cell.num_fmt is not None else "General"
+                col_fmts.append(fmt)
+
+        if not col_fmts:
+            return []
+
+        fmt_counts = Counter(col_fmts)
+        majority_fmt, _ = fmt_counts.most_common(1)[0]
+        return [
+            CellEdit(
+                op="SetNumFmt",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                num_fmt_code=majority_fmt,
+            )
+        ]
+
+
 registry.register(RuleR11())
+registry.register(RuleR16())
 registry.register(RuleR17())
 registry.register(RuleR18())
 registry.register(RuleR19())
