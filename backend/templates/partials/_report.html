@@ -6,35 +6,67 @@
 
 <form hx-post="/fix/{{ job }}" hx-target="#app">
     <div class="findings-list">
-        {% set rules_seen = [] %}
-        {% for f in findings %}
-            {% if f.rule_id not in rules_seen %}
-                {% set _ = rules_seen.append(f.rule_id) %}
-                <details hx-get="/findings/{{ job }}?rule={{ f.rule_id }}"
-                         hx-trigger="toggle once" 
-                         hx-target="find tbody">
-                    <summary>
-                        <input type="checkbox" name="fix" value="{{ f.rule_id }}" {% if f.risk != 'value' %}checked{% endif %}>
-                        <strong>{{ f.rule_id }}</strong>: Lỗi phát hiện
-                        <span style="color: var(--text-muted); font-size: 0.9em;">(Bấm để xem chi tiết)</span>
-                    </summary>
-                    <div class="hits">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Sheet</th>
-                                    <th>Ô</th>
-                                    <th>Mô Tả</th>
-                                    <th>Rủi Ro</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- HTMX will swap findings here -->
-                            </tbody>
-                        </table>
+        {% set groups = grouped_findings if grouped_findings is defined and grouped_findings else {} %}
+        {% if not groups and findings %}
+            {% set groups = {} %}
+            {% for f in findings %}
+                {% if f.rule_id not in groups %}
+                    {% set _ = groups.update({f.rule_id: []}) %}
+                {% endif %}
+                {% set _ = groups[f.rule_id].append(f) %}
+            {% endfor %}
+        {% endif %}
+
+        {% for rule_id, rule_findings in groups.items() %}
+            {% set rule = rules_map.get(rule_id) if rules_map is defined and rules_map else none %}
+            {% set rule_risk = rule.risk if rule else rule_findings[0].risk %}
+            {% set rule_title = rule.title if rule else rule_findings[0].description %}
+            {% set rule_why = rule.why if rule else "" %}
+            <details hx-get="/findings/{{ job }}?rule={{ rule_id }}"
+                     hx-trigger="toggle once" 
+                     hx-target="find tbody">
+                <summary>
+                    <div style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                        {% if rule_risk == 'value' %}
+                            <span class="badge" style="background: var(--error-bg, #ffebee); color: var(--error, #c62828); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">Số liệu</span>
+                        {% elif rule_risk == 'display' %}
+                            <input type="checkbox" name="fix" value="{{ rule_id }}" checked>
+                            <span class="badge" style="background: var(--warning-bg, #fff8e1); color: var(--warning, #f57f17); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">Hiển thị</span>
+                        {% else %}
+                            <input type="checkbox" name="fix" value="{{ rule_id }}" checked>
+                            <span class="badge" style="background: var(--success-bg, #e8f5e9); color: var(--success, #2e7d32); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">An toàn</span>
+                        {% endif %}
+                        <strong>{{ rule_id }}</strong>: {{ rule_title }}
+                        <span style="color: var(--text-muted); font-size: 0.9em;">({{ rule_findings|length }} ô)</span>
                     </div>
-                </details>
-            {% endif %}
+                    {% if rule_risk == 'value' %}
+                        <span style="color: var(--error); font-size: 0.85em; font-style: italic; margin-left: 0.5rem;">(Cần duyệt từng ô bên dưới)</span>
+                    {% else %}
+                        <span style="color: var(--text-muted); font-size: 0.85em; margin-left: 0.5rem;">(Bấm để xem chi tiết)</span>
+                    {% endif %}
+                </summary>
+                {% if rule_why %}
+                    <div class="rule-why" style="margin: 0.4rem 0 0.6rem 1rem; font-size: 0.9em; color: var(--text-muted);">
+                        <em>{{ rule_why }}</em>
+                    </div>
+                {% endif %}
+                <div class="hits">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50px; text-align: center;">Chọn</th>
+                                <th>Sheet</th>
+                                <th>Ô</th>
+                                <th>Mô Tả</th>
+                                <th>Rủi Ro</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- HTMX will swap findings here -->
+                        </tbody>
+                    </table>
+                </div>
+            </details>
         {% endfor %}
     </div>
     

@@ -97,10 +97,21 @@ async def check_scan(request: Request, job_id: str):
         )
     else:
         # Done
+        findings = job.get("findings", [])
+        rules_map = {r.id: r for r in registry.get_all()}
+        grouped_findings: dict[str, list] = {}
+        for f in findings:
+            grouped_findings.setdefault(f.rule_id, []).append(f)
+
         response = templates.TemplateResponse(
             request=request,
             name="partials/_report.html",
-            context={"job": job_id, "findings": job["findings"]},
+            context={
+                "job": job_id,
+                "findings": findings,
+                "grouped_findings": grouped_findings,
+                "rules_map": rules_map,
+            },
         )
         response.headers["HX-Trigger"] = "scanDone"
         return response
@@ -180,6 +191,9 @@ async def preview_fix(request: Request, job_id: str):
 
     form = await request.form()
     selected_rules = set(form.getlist("fix"))
+    selected_findings_raw = set(form.getlist("fix_finding")) | set(
+        form.getlist("fix_cell")
+    )
 
     original_file = job.get("original_file")
     if not original_file or not Path(original_file).exists():
@@ -191,7 +205,26 @@ async def preview_fix(request: Request, job_id: str):
     edits: list[Edit] = []
     rules_map = {r.id: r for r in registry.get_all()}
 
-    selected_findings = [f for f in findings if f.rule_id in selected_rules]
+    selected_findings = []
+    for f in findings:
+        cell_key_finding = f"{f.rule_id}:{f.sheet}!{f.ref}"
+        cell_key_simple = f"{f.sheet}!{f.ref}"
+        if f.risk == "value":
+            # Per Principle 4 and Milestone 8: value risk must be approved per cell, not per group
+            if (
+                cell_key_finding in selected_findings_raw
+                or cell_key_simple in selected_findings_raw
+            ):
+                selected_findings.append(f)
+        else:
+            # Safe and display rules can be approved via group checkbox or per-cell
+            if (
+                f.rule_id in selected_rules
+                or cell_key_finding in selected_findings_raw
+                or cell_key_simple in selected_findings_raw
+            ):
+                selected_findings.append(f)
+
     for f in selected_findings:
         rule = rules_map.get(f.rule_id)
         if rule and rule.auto_fixable:
