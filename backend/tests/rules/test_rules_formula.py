@@ -175,3 +175,65 @@ def test_r08_formula_outlier():
     assert len(edits) == 1
     assert edits[0].ref == "C4"
     assert edits[0].formula == "A4*B4"
+
+
+def test_r03_error_code_literal_fix():
+    r03 = RuleR03()
+    wb = WorkbookModel(inventory=WorkbookInventory())
+    wb.shared_strings = ["#REF!", "Normal text"]
+    wb.sheets = {
+        "Sheet1": SheetModel(
+            name="Sheet1",
+            target="worksheets/sheet1.xml",
+            cells={
+                "A1": CellModel(ref="A1", t="s", v="0"),  # points to #REF!
+                "A2": CellModel(ref="A2", t="s", v="1"),  # normal
+                "A3": CellModel(ref="A3", v="#DIV/0!"),  # direct literal
+            },
+        )
+    }
+    findings = r03.detect(wb)
+    assert len(findings) == 2
+    f_a1 = next(f for f in findings if f.ref == "A1")
+    edits_a1 = r03.fix(wb, f_a1)
+    assert len(edits_a1) == 1
+    assert edits_a1[0].op == "ClearCell"
+    assert edits_a1[0].ref == "A1"
+    assert edits_a1[0].sheet == "Sheet1"
+
+    f_a3 = next(f for f in findings if f.ref == "A3")
+    edits_a3 = r03.fix(wb, f_a3)
+    assert len(edits_a3) == 1
+    assert edits_a3[0].op == "ClearCell"
+    assert edits_a3[0].ref == "A3"
+
+
+def test_r04_arithmetic_empty_cell_fix():
+    r04 = RuleR04()
+    wb = WorkbookModel(inventory=WorkbookInventory())
+    wb.sheets = {
+        "Sheet1": SheetModel(
+            name="Sheet1",
+            target="worksheets/sheet1.xml",
+            cells={
+                "A1": CellModel(ref="A1", t="str", v=""),  # empty string cell
+                "B1": CellModel(ref="B1", f="A1*2"),  # arithmetic on A1
+                "C1": CellModel(ref="C1", f="A1+B1"),  # arithmetic on A1
+            },
+        )
+    }
+    findings = r04.detect(wb)
+    assert len(findings) == 2
+
+    f_b1 = next(f for f in findings if f.ref == "B1")
+    edits_b1 = r04.fix(wb, f_b1)
+    assert len(edits_b1) == 1
+    assert edits_b1[0].op == "SetFormula"
+    assert edits_b1[0].ref == "B1"
+    assert edits_b1[0].formula == "N(A1)*2"
+
+    f_c1 = next(f for f in findings if f.ref == "C1")
+    edits_c1 = r04.fix(wb, f_c1)
+    assert len(edits_c1) == 1
+    assert edits_c1[0].formula == "N(A1)+B1"
+
