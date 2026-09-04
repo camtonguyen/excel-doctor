@@ -376,3 +376,37 @@ def test_apply_clear_cell_with_formula_drops_calc_chain(tmp_path: Path):
             assert c is not None
             assert c.find(f"{ns}v") is None
             assert c.find(f"{ns}f") is None
+
+
+def test_clear_cell_removes_t_attribute(tmp_path):
+    input_path = tmp_path / "in_t.xlsx"
+    output_path = tmp_path / "out_t.xlsx"
+    with zipfile.ZipFile(input_path, "w") as z:
+        z.writestr(
+            "xl/_rels/workbook.xml.rels",
+            b'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+        )
+        z.writestr(
+            "xl/workbook.xml",
+            b'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>',
+        )
+        z.writestr(
+            "xl/worksheets/sheet1.xml",
+            b'<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="B2" t="s"><v>0</v></c></row></sheetData></worksheet>',
+        )
+
+    edits = [CellEdit(op="ClearCell", sheet="Sheet1", ref="B2")]
+    apply_edits(input_path, output_path, edits)
+
+    with (
+        zipfile.ZipFile(output_path, "r") as z,
+        z.open("xl/worksheets/sheet1.xml") as f,
+    ):
+        tree = etree.parse(f)
+        root = tree.getroot()
+        ns = f"{{{root.nsmap.get(None)}}}"
+        c = root.find(f".//{ns}c[@r='B2']")
+        assert c is not None
+        assert c.get("t") is None
+        assert c.find(f"{ns}v") is None
+

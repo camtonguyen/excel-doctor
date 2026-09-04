@@ -53,8 +53,8 @@ def _normalize_to_relative(formula: str, base_row: int) -> str:
 
 class RuleR01(Rule):
     id = "R01"
-    title = "Formula contains #REF!"
-    why = "A cell was deleted that this formula depended on."
+    title = "Công thức chứa lỗi #REF!"
+    why = "Ô tham chiếu bị xóa khiến công thức không tính toán được. Cần kiểm tra lại ô bị mất trước khi sửa."
     severity = "error"
     risk = "value"
     auto_fixable = False
@@ -78,8 +78,8 @@ class RuleR01(Rule):
 
 class RuleR02(Rule):
     id = "R02"
-    title = "Cell currently evaluates to an error"
-    why = "The cached value of the cell is an error type."
+    title = "Ô đang có giá trị lỗi"
+    why = "Giá trị hiện tại của ô bị lỗi (#VALUE!, #DIV/0!, ...). Cần truy vết ô gốc bị lỗi trong chuỗi tính toán."
     severity = "error"
     risk = "value"
     auto_fixable = False
@@ -105,8 +105,8 @@ class RuleR02(Rule):
 
 class RuleR03(Rule):
     id = "R03"
-    title = "Error code pasted in as literal text"
-    why = "Values were pasted as text without formulas, carrying over an error."
+    title = "Mã lỗi bị dán đè dạng văn bản"
+    why = "Mã lỗi bị dán chết thành văn bản thay vì công thức, khiến hàm SUM và tính toán bỏ qua hoặc báo lỗi."
     severity = "error"
     risk = "value"
     auto_fixable = True
@@ -126,7 +126,7 @@ class RuleR03(Rule):
         for sheet_name, ref, cell in wb.iter_cells():
             if cell.f:
                 continue
-            text = wb.resolve_shared_string(cell)
+            text = wb.resolve_shared_string(cell) or (cell.v if isinstance(cell.v, str) else "")
             if text in error_strings:
                 findings.append(
                     Finding(
@@ -140,13 +140,20 @@ class RuleR03(Rule):
                 )
         return findings
 
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        return [
+            CellEdit(
+                op="ClearCell",
+                sheet=finding.sheet,
+                ref=finding.ref,
+            )
+        ]
+
 
 class RuleR04(Rule):
     id = "R04"
-    title = "Arithmetic directly on a cell that returns empty string"
-    why = (
-        "Doing A1*2 when A1 is '' returns #VALUE!. It is the most common hidden defect."
-    )
+    title = "Phép tính số học trên ô trả về chuỗi rỗng"
+    why = "Phép tính cộng trừ nhân chia trực tiếp vào ô có giá trị '' sẽ gây lỗi #VALUE! khi mở bằng Excel."
     severity = "error"
     risk = "display"
     auto_fixable = True
@@ -156,8 +163,8 @@ class RuleR04(Rule):
         # Pre-compute cells that return ""
         empty_cells: dict[str, set[str]] = {}
         for sheet_name, ref, cell in wb.iter_cells():
-            # A cell that is type "str" and value ""
-            if cell.t == "str" and cell.v == "":
+            # A cell that is empty string
+            if cell.v == "" and (cell.t in ("str", "s", "inlineStr") or cell.f is not None):
                 empty_cells.setdefault(sheet_name, set()).add(ref)
 
         # Now detect arithmetic on those cells
@@ -183,10 +190,39 @@ class RuleR04(Rule):
                                     description=f"Arithmetic operation on cell {t.value} which evaluates to empty string",
                                     severity=self.severity,
                                     risk=self.risk,
-                                )
+                                    )
                             )
                             break
         return findings
+
+    def fix(self, wb: WorkbookModel, finding: Finding) -> list[Edit]:
+        sheet = wb.sheets[finding.sheet]
+        cell = sheet.cells[finding.ref]
+        if not cell.f:
+            return []
+
+        empty_cells = set()
+        for ref, c in sheet.cells.items():
+            if c.v == "" and (c.t in ("str", "s", "inlineStr") or c.f is not None):
+                empty_cells.add(ref)
+
+        tokens = tokenize(cell.f)
+        new_tokens = []
+        for t in tokens:
+            if t.type == TokenType.OPERAND and t.value in empty_cells:
+                new_tokens.append(f"N({t.value})")
+            else:
+                new_tokens.append(t.value)
+
+        return [
+            CellEdit(
+                op="SetFormula",
+                sheet=finding.sheet,
+                ref=finding.ref,
+                formula="".join(new_tokens),
+            )
+        ]
+
 
 
 class RuleR06(Rule):
@@ -343,8 +379,8 @@ class RuleR07(Rule):
 
 class RuleR05(Rule):
     id = "R05"
-    title = "Reference to a sheet that doesn't exist"
-    why = "Formula references a deleted or missing sheet."
+    title = "Tham chiếu đến trang tính không tồn tại"
+    why = "Công thức tham chiếu đến tên Sheet không có trong sổ tính, gây lỗi toàn bộ chuỗi công thức phụ thuộc."
     severity = "error"
     risk = "value"
     auto_fixable = False

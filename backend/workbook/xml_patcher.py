@@ -286,6 +286,8 @@ def apply_edits(
                                             c_node.set("s", str(new_s))
 
                                     elif edit.op == "ClearCell":
+                                        if "t" in c_node.attrib:
+                                            del c_node.attrib["t"]
                                         _clear_cell_children(c_node, ns)
 
                         _rewrite_xml_part(zin, zout, item, SPREADSHEET_NS, mutate_sheet)
