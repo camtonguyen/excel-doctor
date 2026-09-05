@@ -21,6 +21,8 @@ class JobStore:
             "total_sheets": 0,
             "done_sheets": 0,
             "dir": job_dir,
+            "selected_rules": set(),
+            "selected_findings": set(),
         }
         return job_id
 
