@@ -56,6 +56,8 @@ async def test_scan_endpoints():
         response_done = await ac.get(f"/scan/{job_id}")
         assert response_done.status_code == 200
         assert "Báo cáo kiểm tra" in response_done.text
+        assert 'name="q"' in response_done.text
+        assert 'hx-target="#findings"' in response_done.text
         assert "scanDone" in response_done.headers.get("hx-trigger", "")
 
         # 5. Test findings API

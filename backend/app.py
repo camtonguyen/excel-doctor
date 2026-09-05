@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from backend.audit.base import registry
-from backend.model import Edit
+from backend.model import DiffEntry, Edit
 from backend.store import store
 from backend.verify.verifier import verify_patch
 from backend.workbook.reader import read_workbook
@@ -204,6 +204,7 @@ async def findings_list(
         context={
             "job": job_id,
             "rule": rule,
+            "q": q,
             "page": page,
             "findings": paginated,
             "has_next": has_next,
@@ -303,6 +304,10 @@ async def preview_fix(request: Request, job_id: str):
     else:
         job["patched_file"] = patched_file
 
+    grouped_diffs: dict[str, list[DiffEntry]] = {}
+    for d in diff_entries:
+        grouped_diffs.setdefault(d.cause, []).append(d)
+
     return render_fragment_or_page(
         request=request,
         template_name="partials/_diff.html",
@@ -311,6 +316,7 @@ async def preview_fix(request: Request, job_id: str):
             "ok": ok,
             "error": error_msg,
             "diffs": diff_entries,
+            "grouped_diffs": grouped_diffs,
             "total_changes": len(diff_entries),
         },
     )

@@ -5,6 +5,31 @@
 </div>
 
 <form hx-post="/fix/{{ job }}" hx-target="#app">
+    <div class="search-bar" style="margin: 1.5rem 0;">
+        <input type="search" name="q" placeholder="Lọc theo sheet hoặc ô…"
+               hx-get="/findings/{{ job }}" hx-trigger="keyup changed delay:300ms, search"
+               hx-target="#findings" hx-swap="innerHTML"
+               class="search-input"
+               style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem;">
+    </div>
+
+    <div class="search-results-wrapper" style="margin-bottom: 1.5rem; overflow-x: auto;">
+        <table class="table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f9fafb; text-align: left;">
+                    <th style="width: 50px; text-align: center; padding: 8px;">Chọn</th>
+                    <th style="padding: 8px;">Sheet</th>
+                    <th style="padding: 8px;">Ô</th>
+                    <th style="padding: 8px;">Mô Tả</th>
+                    <th style="padding: 8px;">Rủi Ro</th>
+                </tr>
+            </thead>
+            <tbody id="findings">
+                <!-- Kết quả tìm kiếm trực tiếp sẽ hiển thị ở đây -->
+            </tbody>
+        </table>
+    </div>
+
     <div class="findings-list">
         {% set groups = grouped_findings if grouped_findings is defined and grouped_findings else {} %}
         {% if not groups and findings %}

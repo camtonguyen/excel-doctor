@@ -45,39 +45,66 @@
     </main>
 
     <script>
-        // JS allowed per §6b: drag and drop + showing filename
+        // JS allowed per §6b:
+        // 1. Drag and drop
+        // 2. Showing the selected filename before submit
+        // 3. Warning before leaving the page while a job is running
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const selectedFile = document.getElementById('selected-file');
         const form = document.querySelector('form.upload-form');
 
-        fileInput.addEventListener('change', (e) => {
-            if (fileInput.files.length > 0) {
-                selectedFile.textContent = `Đã chọn: ${fileInput.files[0].name}`;
-            } else {
-                selectedFile.textContent = '';
+        if (fileInput && selectedFile) {
+            fileInput.addEventListener('change', (e) => {
+                if (fileInput.files.length > 0) {
+                    selectedFile.textContent = `Đã chọn: ${fileInput.files[0].name}`;
+                } else {
+                    selectedFile.textContent = '';
+                }
+            });
+        }
+
+        if (dropZone && fileInput && form) {
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileInput.dispatchEvent(new Event('change'));
+                    form.requestSubmit();
+                }
+            });
+        }
+
+        // 3. Warning before leaving the page while a job is running (§6b)
+        let isJobRunning = false;
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            const path = (evt.detail && evt.detail.pathInfo) ? evt.detail.pathInfo.requestPath : '';
+            if (path && (path.startsWith('/scan') || path.startsWith('/fix'))) {
+                isJobRunning = true;
             }
         });
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
+        document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+            const path = (evt.detail && evt.detail.pathInfo) ? evt.detail.pathInfo.requestPath : '';
+            const trigger = (evt.detail && evt.detail.xhr) ? evt.detail.xhr.getResponseHeader('HX-Trigger') : null;
+            if (trigger === 'scanDone' || (path && path.endsWith('/confirm'))) {
+                isJobRunning = false;
+            }
         });
-
-        dropZone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                fileInput.files = e.dataTransfer.files;
-                fileInput.dispatchEvent(new Event('change'));
-                // auto-submit on drop? The spec says:
-                // "assign dataTransfer.files[0] to the input and call form.requestSubmit()"
-                form.requestSubmit();
+        window.addEventListener('beforeunload', function(e) {
+            if (isJobRunning) {
+                e.preventDefault();
+                e.returnValue = '';
             }
         });
     </script>

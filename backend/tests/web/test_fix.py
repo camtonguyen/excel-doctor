@@ -46,6 +46,9 @@ async def test_fix_flow_with_verification_and_download():
         )
         assert res_fix.status_code == 200
         assert "Bảng đối chiếu thay đổi" in res_fix.text
+        assert "diff-group" in res_fix.text
+        assert "ô thay đổi" in res_fix.text
+        assert "R14" in res_fix.text
         assert "Xác nhận tải về" in res_fix.text
 
         # 4. Confirm fix (POST /fix/{job_id}/confirm)
