@@ -10,9 +10,7 @@ from backend.store import store
 @pytest.mark.asyncio
 async def test_fix_flow_with_verification_and_download():
     fixture_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "fixtures"
-        / "whitespace.xlsx"
+        Path(__file__).parent.parent.parent.parent / "fixtures" / "whitespace.xlsx"
     )
 
     async with AsyncClient(
@@ -69,9 +67,7 @@ async def test_fix_flow_with_verification_and_download():
 @pytest.mark.asyncio
 async def test_verification_failure_blocks_download():
     fixture_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "fixtures"
-        / "whitespace.xlsx"
+        Path(__file__).parent.parent.parent.parent / "fixtures" / "whitespace.xlsx"
     )
 
     async with AsyncClient(
@@ -95,18 +91,26 @@ async def test_verification_failure_blocks_download():
 
         job = store.get_job(job_id)
         job["verification_ok"] = False
+        job["verification_error"] = (
+            "Presentation diff detected unauthorized style changes"
+        )
 
-        # Attempting confirm when verification failed -> 400
+        # Attempting confirm when verification failed -> 400 with Vietnamese reason
         res_confirm = await ac.post(f"/fix/{job_id}/confirm")
         assert res_confirm.status_code == 400
+        assert "Tệp không được sửa đổi vì:" in res_confirm.text
+        assert "Presentation diff" in res_confirm.text
+
+        # Spec §6.6 / §7: Original-on-failure: when verification aborts, original is returned byte-for-byte
+        res_download = await ac.get(f"/download/{job_id}")
+        assert res_download.status_code == 200
+        assert res_download.content == fixture_path.read_bytes()
 
 
 @pytest.mark.asyncio
 async def test_value_group_requires_per_cell_approval():
     fixture_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "fixtures"
-        / "r08_outlier.xlsx"
+        Path(__file__).parent.parent.parent.parent / "fixtures" / "r08_outlier.xlsx"
     )
 
     async with AsyncClient(
@@ -140,7 +144,7 @@ async def test_value_group_requires_per_cell_approval():
         assert res_findings.status_code == 200
         assert 'name="fix_finding"' in res_findings.text
         assert 'value="R08:Sheet1!C4"' in res_findings.text
-        assert 'checked' not in res_findings.text
+        assert "checked" not in res_findings.text
 
         # 1. Posting without approving the specific cell -> NOT fixed (0 changes)
         res_fix_empty = await ac.post(
@@ -159,4 +163,3 @@ async def test_value_group_requires_per_cell_approval():
         assert res_fix_cell.status_code == 200
         assert "<strong>1</strong> thay đổi" in res_fix_cell.text
         assert "C4" in res_fix_cell.text
-

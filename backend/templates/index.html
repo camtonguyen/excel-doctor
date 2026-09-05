@@ -17,25 +17,30 @@
 
     <main class="app-main">
         <div id="app" class="card">
-            <h2>Tải lên file Excel</h2>
-            <form hx-post="/scan" 
-                  hx-encoding="multipart/form-data"
-                  hx-target="#app" 
-                  hx-swap="innerHTML"
-                  hx-indicator="#spinner"
-                  class="upload-form">
-                
-                <div class="drop-zone" id="drop-zone">
-                    <p>Kéo thả file .xlsx / .xlsm vào đây, hoặc click để chọn file</p>
-                    <input type="file" name="file" id="file-input" accept=".xlsx,.xlsm" required>
-                    <div id="selected-file" class="selected-file"></div>
-                </div>
+            {% if content_fragment %}
+                {{ content_fragment | safe }}
+            {% else %}
+                <h2>Tải lên file Excel</h2>
+                <form action="/scan" method="post" enctype="multipart/form-data"
+                      hx-post="/scan" 
+                      hx-encoding="multipart/form-data"
+                      hx-target="#app" 
+                      hx-swap="innerHTML"
+                      hx-indicator="#spinner"
+                      class="upload-form">
+                    
+                    <div class="drop-zone" id="drop-zone">
+                        <p>Kéo thả file .xlsx / .xlsm vào đây, hoặc click để chọn file</p>
+                        <input type="file" name="file" id="file-input" accept=".xlsx,.xlsm" required>
+                        <div id="selected-file" class="selected-file"></div>
+                    </div>
 
-                <div class="actions">
-                    <button type="submit" class="btn primary">Kiểm tra file</button>
-                    <div id="spinner" class="htmx-indicator spinner"></div>
-                </div>
-            </form>
+                    <div class="actions">
+                        <button type="submit" class="btn primary">Kiểm tra file</button>
+                        <div id="spinner" class="htmx-indicator spinner"></div>
+                    </div>
+                </form>
+            {% endif %}
         </div>
     </main>
 

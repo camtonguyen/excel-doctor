@@ -2,7 +2,8 @@
 <tr>
     <td style="text-align: center;">
         {% if f.risk == 'value' %}
-            <input type="checkbox" name="fix_finding" value="{{ f.rule_id }}:{{ f.sheet }}!{{ f.ref }}">
+            {% set finding_key = f.rule_id ~ ':' ~ f.sheet ~ '!' ~ f.ref %}
+            <input type="checkbox" name="fix_finding" value="{{ finding_key }}"{% if selected_findings and finding_key in selected_findings %} checked{% endif %}>
         {% else %}
             <span style="color: var(--success); font-weight: bold;" title="Duyệt theo nhóm">✓</span>
         {% endif %}

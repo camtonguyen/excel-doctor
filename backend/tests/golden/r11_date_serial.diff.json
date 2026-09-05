@@ -1,0 +1,34 @@
+[
+  {
+    "sheet": "Sheet1",
+    "ref": "B2",
+    "before": "45306",
+    "after": "45306",
+    "cause": "R11",
+    "note": "Date serial number 45306 rendered without date format"
+  },
+  {
+    "sheet": "Sheet1",
+    "ref": "B3",
+    "before": "44927",
+    "after": "44927",
+    "cause": "R11",
+    "note": "Date serial number 44927 rendered without date format"
+  },
+  {
+    "sheet": "Sheet1",
+    "ref": "C2",
+    "before": "45100",
+    "after": "45100",
+    "cause": "R11",
+    "note": "Date serial number 45100 rendered without date format"
+  },
+  {
+    "sheet": "Sheet1",
+    "ref": "C3",
+    "before": "45200",
+    "after": "45200",
+    "cause": "R11",
+    "note": "Date serial number 45200 rendered without date format"
+  }
+]

@@ -22,6 +22,41 @@ app.mount(
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
+def render_fragment_or_page(
+    request: Request,
+    template_name: str,
+    context: dict,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
+    is_htmx = request.headers.get("HX-Request", "").lower() in ("true", "1")
+    if is_htmx:
+        resp = templates.TemplateResponse(
+            request=request,
+            name=template_name,
+            context=context,
+            status_code=status_code,
+        )
+    else:
+        # Full-page response per §6b: if no HX-Request, return full page
+        rendered_fragment = templates.get_template(template_name).render(context)
+        page_context = {
+            **context,
+            "request": request,
+            "content_fragment": rendered_fragment,
+        }
+        resp = templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context=page_context,
+            status_code=status_code,
+        )
+    if headers:
+        for k, v in headers.items():
+            resp.headers[k] = v
+    return resp
+
+
 def background_scan(job_id: str, file_path: str):
     job = store.get_job(job_id)
     if not job:
@@ -68,9 +103,9 @@ async def start_scan(
 
     background_tasks.add_task(background_scan, job_id, str(file_path))
 
-    return templates.TemplateResponse(
+    return render_fragment_or_page(
         request=request,
-        name="partials/_scanning.html",
+        template_name="partials/_scanning.html",
         context={"job": job_id, "done": 0, "total": "?"},
     )
 
@@ -79,16 +114,17 @@ async def start_scan(
 async def check_scan(request: Request, job_id: str):
     job = store.get_job(job_id)
     if not job:
-        return templates.TemplateResponse(
+        return render_fragment_or_page(
             request=request,
-            name="partials/_error.html",
+            template_name="partials/_error.html",
             context={"message": "Job not found"},
+            status_code=404,
         )
 
     if job["status"] == "scanning":
-        return templates.TemplateResponse(
+        return render_fragment_or_page(
             request=request,
-            name="partials/_scanning.html",
+            template_name="partials/_scanning.html",
             context={
                 "job": job_id,
                 "done": job["done_sheets"],
@@ -103,27 +139,42 @@ async def check_scan(request: Request, job_id: str):
         for f in findings:
             grouped_findings.setdefault(f.rule_id, []).append(f)
 
-        response = templates.TemplateResponse(
+        return render_fragment_or_page(
             request=request,
-            name="partials/_report.html",
+            template_name="partials/_report.html",
             context={
                 "job": job_id,
                 "findings": findings,
                 "grouped_findings": grouped_findings,
                 "rules_map": rules_map,
+                "selected_rules": job.get("selected_rules", set()),
+                "selected_findings": job.get("selected_findings", set()),
             },
+            headers={"HX-Trigger": "scanDone"},
         )
-        response.headers["HX-Trigger"] = "scanDone"
-        return response
 
 
 @app.get("/findings/{job_id}", response_class=HTMLResponse)
+@app.post("/findings/{job_id}", response_class=HTMLResponse)
 async def findings_list(
     request: Request, job_id: str, rule: str = "", q: str = "", page: int = 1
 ):
     job = store.get_job(job_id)
     if not job:
         return HTMLResponse("Job not found", status_code=404)
+
+    # Trap 13: Remember tick selections on the server keyed by job_id
+    if request.method == "POST":
+        form = await request.form()
+        if "fix" in form:
+            job["selected_rules"] = set(form.getlist("fix"))
+        if "fix_finding" in form:
+            job["selected_findings"] = set(form.getlist("fix_finding"))
+    else:
+        if "fix" in request.query_params:
+            job["selected_rules"] = set(request.query_params.getlist("fix"))
+        if "fix_finding" in request.query_params:
+            job["selected_findings"] = set(request.query_params.getlist("fix_finding"))
 
     items_per_page = 50
     findings = job.get("findings", [])
@@ -156,6 +207,8 @@ async def findings_list(
             "page": page,
             "findings": paginated,
             "has_next": has_next,
+            "selected_rules": job.get("selected_rules", set()),
+            "selected_findings": job.get("selected_findings", set()),
         },
     )
 
@@ -239,13 +292,20 @@ async def preview_fix(request: Request, job_id: str):
 
     job["edits"] = edits
     job["diffs"] = diff_entries
-    job["patched_file"] = patched_file
     job["verification_ok"] = ok
     job["verification_error"] = error_msg
 
-    return templates.TemplateResponse(
+    if not ok:
+        if patched_file.exists():
+            patched_file.unlink()
+        job["patched_file"] = None
+        job["fixed_file"] = original_file
+    else:
+        job["patched_file"] = patched_file
+
+    return render_fragment_or_page(
         request=request,
-        name="partials/_diff.html",
+        template_name="partials/_diff.html",
         context={
             "job": job_id,
             "ok": ok,
@@ -263,7 +323,19 @@ async def confirm_fix(request: Request, job_id: str):
         return HTMLResponse("Job not found", status_code=404)
 
     if not job.get("verification_ok"):
-        return HTMLResponse("Verification failed", status_code=400)
+        patched_file = job.get("patched_file")
+        if patched_file and Path(patched_file).exists():
+            Path(patched_file).unlink()
+        job["patched_file"] = None
+        job["fixed_file"] = job.get("original_file")
+        return render_fragment_or_page(
+            request=request,
+            template_name="partials/_error.html",
+            context={
+                "message": f"Tệp không được sửa đổi vì: {job.get('verification_error', 'Kiểm tra thất bại')}"
+            },
+            status_code=400,
+        )
 
     patched_file = job.get("patched_file")
     if not patched_file or not Path(patched_file).exists():
@@ -274,9 +346,9 @@ async def confirm_fix(request: Request, job_id: str):
     shutil.copy(patched_file, fixed_file)
     job["fixed_file"] = fixed_file
 
-    return templates.TemplateResponse(
+    return render_fragment_or_page(
         request=request,
-        name="partials/_ready.html",
+        template_name="partials/_ready.html",
         context={
             "job": job_id,
             "filename": fixed_filename,
@@ -291,7 +363,9 @@ async def download_file(job_id: str):
     if not job:
         return HTMLResponse("Job not found", status_code=404)
 
-    fixed_file = job.get("fixed_file") or job.get("patched_file")
+    fixed_file = (
+        job.get("fixed_file") or job.get("patched_file") or job.get("original_file")
+    )
     if not fixed_file or not Path(fixed_file).exists():
         return HTMLResponse("Fixed file not found", status_code=404)
 
