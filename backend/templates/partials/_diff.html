@@ -13,31 +13,55 @@
 
     {% if ok %}
         {% if diffs %}
-            <div class="diff-table-wrapper" style="overflow-x: auto; margin-top: 1rem;">
-                <table class="table" style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f3f4f6; text-align: left;">
-                            <th style="padding: 8px;">Sheet</th>
-                            <th style="padding: 8px;">Ô</th>
-                            <th style="padding: 8px;">Trước</th>
-                            <th style="padding: 8px;">Sau</th>
-                            <th style="padding: 8px;">Quy tắc</th>
-                            <th style="padding: 8px;">Mô tả</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for d in diffs %}
-                            <tr style="border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 8px;">{{ d.sheet }}</td>
-                                <td style="padding: 8px;"><strong>{{ d.ref }}</strong></td>
-                                <td style="padding: 8px; color: #dc2626;"><code>{{ d.before }}</code></td>
-                                <td style="padding: 8px; color: #16a34a;"><code>{{ d.after }}</code></td>
-                                <td style="padding: 8px;"><span class="badge">{{ d.cause }}</span></td>
-                                <td style="padding: 8px; color: #4b5563;">{{ d.note }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="diff-groups" style="margin-top: 1.5rem;">
+                {% set groups = grouped_diffs if grouped_diffs is defined and grouped_diffs else {} %}
+                {% if not groups and diffs %}
+                    {% set groups = {} %}
+                    {% for d in diffs %}
+                        {% if d.cause not in groups %}
+                            {% set _ = groups.update({d.cause: []}) %}
+                        {% endif %}
+                        {% set _ = groups[d.cause].append(d) %}
+                    {% endfor %}
+                {% endif %}
+
+                {% for cause, items in groups.items() %}
+                    <div class="diff-group" style="margin-bottom: 2rem; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                        <div class="diff-group-header" style="background: #f3f4f6; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb;">
+                            <div>
+                                <span class="badge" style="background: #e0e7ff; color: #3730a3; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold;">{{ cause }}</span>
+                                <strong style="margin-left: 0.5rem;">{{ items[0].note if items else '' }}</strong>
+                            </div>
+                            <span style="color: #4b5563; font-size: 0.9em; font-weight: 500;">
+                                {{ items|length }} ô thay đổi
+                            </span>
+                        </div>
+                        <div class="diff-table-wrapper" style="overflow-x: auto;">
+                            <table class="table" style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f9fafb; text-align: left; border-bottom: 1px solid #e5e7eb;">
+                                        <th style="padding: 8px 16px;">Sheet</th>
+                                        <th style="padding: 8px 16px;">Ô</th>
+                                        <th style="padding: 8px 16px;">Trước</th>
+                                        <th style="padding: 8px 16px;">Sau</th>
+                                        <th style="padding: 8px 16px;">Mô tả</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for d in items %}
+                                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                                            <td style="padding: 8px 16px;">{{ d.sheet }}</td>
+                                            <td style="padding: 8px 16px;"><strong>{{ d.ref }}</strong></td>
+                                            <td style="padding: 8px 16px; color: #dc2626;"><code>{{ d.before }}</code></td>
+                                            <td style="padding: 8px 16px; color: #16a34a;"><code>{{ d.after }}</code></td>
+                                            <td style="padding: 8px 16px; color: #4b5563;">{{ d.note }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
         {% else %}
             <p style="color: #4b5563; margin-top: 1rem;">Không có giá trị ô nào bị thay đổi.</p>
