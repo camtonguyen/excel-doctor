@@ -4,6 +4,24 @@
     <a href="/report/{{ job }}.csv" class="btn primary" download>Tải file báo cáo (CSV)</a>
 </div>
 
+{% if inventory and inventory.requires_tier_a %}
+<div class="alert safe-mode-alert" style="background: #e0f2fe; border: 1px solid #7dd3fc; color: #0369a1; padding: 0.75rem 1rem; border-radius: 6px; margin: 1rem 0; font-size: 0.95rem;">
+    <strong style="display: block; margin-bottom: 0.25rem;">Chế độ sửa an toàn (Tier A)</strong>
+    <span>
+        {% set features = [] %}
+        {% if inventory.has_charts %}{% set _ = features.append("biểu đồ") %}{% endif %}
+        {% if inventory.has_drawings and not inventory.has_charts %}{% set _ = features.append("hình vẽ/ảnh") %}{% endif %}
+        {% if inventory.has_macros %}{% set _ = features.append("macro") %}{% endif %}
+        {% if inventory.has_pivot_tables or inventory.has_pivot_caches %}{% set _ = features.append("pivot table") %}{% endif %}
+        {% if features %}
+            File có {{ features | join(' và ') }}, đang dùng chế độ sửa an toàn.
+        {% else %}
+            File có thành phần phức tạp, đang dùng chế độ sửa an toàn.
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
 <form hx-post="/fix/{{ job }}" hx-target="#app">
     <div class="search-bar" style="margin: 1.5rem 0;">
         <input type="search" name="q" placeholder="Lọc theo sheet hoặc ô…"

@@ -200,3 +200,79 @@ async def test_no_js_fallback_returns_full_page():
         assert '<html lang="vi">' in res_no_js.text
         assert "Excel Doctor" in res_no_js.text
         assert "Báo cáo kiểm tra" in res_no_js.text
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_tier_a_banner():
+    """
+    Spec §5.1:
+    Surface it in the report: 'File có biểu đồ và macro, đang dùng chế độ sửa an toàn.'
+    When scanning a file with charts, macros, or pivot tables, safe mode alert is displayed.
+    """
+    fixture_dir = Path(__file__).parent.parent.parent.parent / "fixtures"
+    macro_fixture = fixture_dir / "macro.xlsm"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        with open(macro_fixture, "rb") as f:  # noqa: ASYNC230
+            res = await ac.post(
+                "/scan",
+                headers={"HX-Request": "true"},
+                files={
+                    "file": (
+                        "macro.xlsm",
+                        f,
+                        "application/vnd.ms-excel.sheet.macroEnabled.12",
+                    )
+                },
+            )
+        assert res.status_code == 200
+        start = res.text.find('hx-get="/scan/') + len('hx-get="/scan/')
+        end = res.text.find('"', start)
+        job_id = res.text[start:end]
+
+        res_report = await ac.get(f"/scan/{job_id}", headers={"HX-Request": "true"})
+        assert res_report.status_code == 200
+        assert "Chế độ sửa an toàn (Tier A)" in res_report.text
+        assert "chế độ sửa an toàn" in res_report.text
+
+
+@pytest.mark.asyncio
+async def test_corrupt_file_scan_error_handling():
+    """
+    Spec §7:
+    corrupt.xlsx: a broken file — must fail gracefully, never crash.
+    When a corrupted or invalid file is scanned, check_scan renders _error.html with status 400.
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        corrupted_bytes = b"This is completely invalid non-zip junk data"
+        res = await ac.post(
+            "/scan",
+            headers={"HX-Request": "true"},
+            files={
+                "file": (
+                    "corrupt.xlsx",
+                    corrupted_bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        assert res.status_code == 200
+        start = res.text.find('hx-get="/scan/') + len('hx-get="/scan/')
+        end = res.text.find('"', start)
+        job_id = res.text[start:end]
+
+        # Polling after error background task finishes
+        res_error = await ac.get(f"/scan/{job_id}", headers={"HX-Request": "true"})
+        assert res_error.status_code == 400
+        assert "Đã xảy ra lỗi" in res_error.text
+        assert res_error.headers.get("hx-trigger") == "scanError"
+
+        # Non-htmx request returns full page with error fragment
+        res_error_no_js = await ac.get(f"/scan/{job_id}")
+        assert res_error_no_js.status_code == 400
+        assert "<!DOCTYPE html>" in res_error_no_js.text
+        assert "Đã xảy ra lỗi" in res_error_no_js.text

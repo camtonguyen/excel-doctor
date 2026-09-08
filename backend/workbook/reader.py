@@ -44,7 +44,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
 
     with zipfile.ZipFile(file_path, "r") as z:
         # 1. Parse shared strings if they exist
-        if "xl/sharedStrings.xml" in z.namelist():
+        if "xl/sharedStrings.xml" in z.namelist() and z.getinfo("xl/sharedStrings.xml").file_size > 0:
             with z.open("xl/sharedStrings.xml") as f:
                 tree = etree.parse(f)
                 for si in tree.getroot().iter("{*}si"):
@@ -54,7 +54,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
 
         # 2. Parse workbook.xml to get sheet names and rel IDs
         sheet_targets = {}
-        if "xl/_rels/workbook.xml.rels" in z.namelist():
+        if "xl/_rels/workbook.xml.rels" in z.namelist() and z.getinfo("xl/_rels/workbook.xml.rels").file_size > 0:
             with z.open("xl/_rels/workbook.xml.rels") as f:
                 tree = etree.parse(f)
                 for rel in tree.getroot().iter("{*}Relationship"):
@@ -65,7 +65,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
                         else:
                             sheet_targets[rel.get("Id")] = "xl/" + target_path
 
-        if "xl/workbook.xml" in z.namelist():
+        if "xl/workbook.xml" in z.namelist() and z.getinfo("xl/workbook.xml").file_size > 0:
             with z.open("xl/workbook.xml") as f:
                 tree = etree.parse(f)
                 for sheet in tree.getroot().iter("{*}sheet"):
@@ -89,7 +89,7 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
         cell_xfs_font_ids = []
         custom_num_fmts = {}
         fonts = {}  # id -> (name, size)
-        if "xl/styles.xml" in z.namelist():
+        if "xl/styles.xml" in z.namelist() and z.getinfo("xl/styles.xml").file_size > 0:
             with z.open("xl/styles.xml") as f:
                 tree = etree.parse(f)
                 root = tree.getroot()
@@ -142,10 +142,9 @@ def read_workbook(file_path: str | Path) -> WorkbookModel:
             49: "@",
         }
 
-
         # 4. Parse cells from each worksheet
         for sheet_model in wb.sheets.values():
-            if sheet_model.target in z.namelist():
+            if sheet_model.target in z.namelist() and z.getinfo(sheet_model.target).file_size > 0:
                 with z.open(sheet_model.target) as f:
                     tree = etree.parse(f)
                     root = tree.getroot()

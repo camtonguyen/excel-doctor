@@ -12,6 +12,7 @@ from backend.audit.base import registry
 from backend.model import DiffEntry, Edit
 from backend.store import store
 from backend.verify.verifier import verify_patch
+from backend.workbook.inventory import get_inventory
 from backend.workbook.reader import read_workbook
 from backend.workbook.xml_patcher import apply_edits
 
@@ -64,6 +65,7 @@ def background_scan(job_id: str, file_path: str):
 
     try:
         wb = read_workbook(file_path)
+        job["inventory"] = get_inventory(file_path)
 
         job["total_sheets"] = len(wb.sheets)
 
@@ -75,8 +77,9 @@ def background_scan(job_id: str, file_path: str):
 
         job["findings"] = all_findings
         job["status"] = "done"
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         job["status"] = "error"
+        job["error_message"] = str(exc) or "Không thể phân tích file: định dạng không hợp lệ hoặc tệp đã bị hỏng."
         job["findings"] = []
 
 
@@ -131,6 +134,19 @@ async def check_scan(request: Request, job_id: str):
                 "total": job["total_sheets"] or "?",
             },
         )
+    elif job["status"] == "error":
+        return render_fragment_or_page(
+            request=request,
+            template_name="partials/_error.html",
+            context={
+                "message": job.get(
+                    "error_message",
+                    "Không thể phân tích file: định dạng không hợp lệ hoặc tệp đã bị hỏng.",
+                )
+            },
+            status_code=400,
+            headers={"HX-Trigger": "scanError"},
+        )
     else:
         # Done
         findings = job.get("findings", [])
@@ -149,6 +165,7 @@ async def check_scan(request: Request, job_id: str):
                 "rules_map": rules_map,
                 "selected_rules": job.get("selected_rules", set()),
                 "selected_findings": job.get("selected_findings", set()),
+                "inventory": job.get("inventory"),
             },
             headers={"HX-Trigger": "scanDone"},
         )
