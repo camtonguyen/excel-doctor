@@ -97,7 +97,7 @@
         document.body.addEventListener('htmx:afterOnLoad', function(evt) {
             const path = (evt.detail && evt.detail.pathInfo) ? evt.detail.pathInfo.requestPath : '';
             const trigger = (evt.detail && evt.detail.xhr) ? evt.detail.xhr.getResponseHeader('HX-Trigger') : null;
-            if (trigger === 'scanDone' || (path && path.endsWith('/confirm'))) {
+            if (trigger === 'scanDone' || trigger === 'scanError' || (path && path.endsWith('/confirm'))) {
                 isJobRunning = false;
             }
         });
